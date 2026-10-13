@@ -1,2 +1,93 @@
-# n8n-nodes-keeper-secrets-manager
-Custom n8n Community Node that enables working with Keeper Secrets Manager in a more native way.
+# Keeper Secrets Manager custom n8n node, v0.1.1
+
+Development starter, not a compiled or live-tested release. The previous archive was unavailable in this execution environment, so source was reconstructed from the prior conversation with the requested changes. Archive integrity and static removal checks were performed; TypeScript compilation and real n8n/Keeper integration tests were not performed.
+
+## Changes
+
+- Only Base64 and pasted JSON credential sources remain.
+- Base64 is the default and its description points to Keeper's clipboard export.
+- No file-path property, filesystem/path imports, file-reading branch, or environment-variable directory requirement remains.
+- The five CRUD operations, required credential identifier, and raw/flat output behavior are retained.
+- npm and pnpm build instructions are provided below.
+
+## Credential setup
+
+In Keeper's Add Device dialog, choose Configuration File, select Base64, and click Copy. Paste that exact string into the n8n credential's Base64 field. No manual encoding is required. Alternatively select JSON and paste the configuration JSON. Configuration File is the name of Keeper's export method; using Copy does not require a local file.
+
+Both inputs must contain a complete already-bound configuration, not a one-time token. The helper decodes Base64 once, parses JSON, validates configuration keys, and calls loadJsonConfig with fresh in-memory storage. It does not redeem one-time tokens or write SDK config changes back to the credential. Base64 is encoding, not encryption; treat either input as sensitive credential material.
+
+## Build
+
+Choose one package manager and commit only its lockfile. npm is the documentation-aligned default; pnpm is a reasonable alternative for this standalone project.
+
+```sh
+npm install
+npm run build
+npm pack
+```
+
+Or:
+
+```sh
+pnpm install
+pnpm run build
+pnpm pack
+```
+
+When using pnpm, commit pnpm-lock.yaml and use pnpm install --frozen-lockfile for CI after the lockfile exists. Do not alternate package managers within the same working tree.
+
+SDK 17.0.0 is retained from the original starter as an unverified baseline, not a latest-version claim. Review the installed SDK declarations, pin n8n-workflow to a version compatible with your deployment, and commit the generated lockfile. The project uses a minimal tsc build, not the official n8n-node CLI scaffolding. No dev/lint/release scripts, icon, credential connection-test button, or automated tests are included. Consider integrating the source into the official scaffold for those development features. This ZIP is source, not a built installable package.
+
+## Operations and output
+
+- Get All returns records accessible to this KSM application. It runs once per incoming n8n item; provide one input item for one fetch.
+- Get by UID accepts comma/whitespace-separated UIDs. Missing requested records fail the item rather than returning silent partial reads.
+- Create requires an accessible shared folder root UID and Keeper record data. Subfolder creation is not implemented.
+- Update fetches the current record and applies a top-level patch. Omitted properties remain unchanged. Supplied fields/custom arrays replace the complete corresponding arrays; there is no field-by-field merge. Concurrent updates can still conflict.
+- Delete requires explicit confirmation. It returns per-UID responseCode and success plus aggregate success. Partial failures are returned as data; branch on success rather than blindly retrying a partially completed batch.
+
+Create/update return UID and success only, not decrypted contents or a refreshed revision. Raw reads emit only UID, revision, and data, not complete SDK objects with key material. Flat reads reproduce the supplied workflow shape, use first values, and allow later normalized field names to overwrite earlier ones. Raw output preserves original labels and arrays.
+
+To reproduce the existing workflow, select Get All, Flat output, and set Exclude Record UIDs to the PAM configuration record UID. No UID is hard-coded.
+
+## Example create data
+
+```json
+{
+ "type": "login",
+ "title": "Example service account",
+ "fields": [
+  { "type": "login", "value": ["example-user"] },
+  { "type": "password", "value": ["REPLACE_AT_RUNTIME"] },
+  { "type": "url", "value": [] }
+ ],
+ "custom": [],
+ "notes": "Created by automation"
+}
+```
+
+## Production validation
+
+1. Compile against the installed SDK and deployment-compatible n8n-workflow declarations.
+2. Test both credential sources and all five operations against disposable records and a test KSM application.
+3. Test malformed configs, missing UIDs, denied writes, invalid record data, deletion confirmation, and mixed-success deletes.
+4. Verify encryption keys never appear in outputs. Secret values intentionally appear in read results; control execution retention, access, logs, and downstream destinations.
+5. Errors generated by this node are sanitized. SDK internal logging has not been audited or suppressed.
+6. Do not automatically retry ambiguous create/delete/write failures; verify actual Keeper state first.
+7. Apply least privilege and n8n credential-sharing controls.
+
+## Later file operations
+
+Keeper attachment upload/download is deferred. Removing credential file-path support does not preclude later attachment operations. Those should use Keeper's file SDK methods and n8n binary-data helpers, without exposing complete SDK objects or download URLs.
+
+## References
+
+- https://docs.keeper.io/keeperpam/secrets-manager/about/secrets-manager-configuration
+- https://docs.keeper.io/keeperpam/secrets-manager/developer-sdk-library/javascript-sdk
+- https://docs.n8n.io/connect/create-nodes/build-your-node/using-the-n8n-node-tool
+- https://docs.n8n.io/connect/create-nodes/build-your-node/set-up-your-development-environment
+- https://pnpm.io/cli/install
+
+## Build and test instructions
+
+See [BUILD_AND_TEST.md](BUILD_AND_TEST.md) for repository/scaffold recommendations, npm/pnpm build commands, official CLI local testing, a manual CRUD test matrix, negative/security checks, and release gates. The guide distinguishes the minimal archive from the official scaffold; it does not claim tests have been executed.

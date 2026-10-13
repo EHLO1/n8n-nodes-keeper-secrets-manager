@@ -1,0 +1,35 @@
+{
+  "name": "n8n-nodes-keeper-secrets-manager",
+  "version": "0.1.1",
+  "description": "Internal Keeper Secrets Manager node and credentials for n8n",
+  "license": "MIT",
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/KeeperSecretsManagerApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/KeeperSecretsManager/KeeperSecretsManager.node.js"
+    ]
+  },
+  "dependencies": {
+    "@keeper-security/secrets-manager-core": "17.0.0"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "n8n-workflow": "*"
+  }
+}
