@@ -95,7 +95,7 @@ The package builds against `n8n-workflow` 2.16.0 and uses the n8n node CLI 0.52.
 
 ### First beta and GUI installation
 
-The first test release is `0.1.0-beta.1`, published under npm's `beta` dist-tag. The publish workflow selects `beta` for versions ending in `-beta.N`, and `latest` for stable versions. A post-publish check removes `latest` if npm assigns it to this beta during first publication; an existing stable `latest` is preserved.
+The first test release is `0.1.0-beta.1`, published under npm's `beta` dist-tag. The publish workflow selects `beta` for versions ending in `-beta.N`, and `latest` for stable versions. npm also assigned `latest` during the initial publication. A post-publish check attempts to remove it if it points to this beta; an existing stable `latest` is preserved. If npm refuses token-based tag removal, the check reports a warning and a maintainer can remove the tag using an interactive npm login. Install the exact beta version shown below regardless of dist-tag state.
 
 For the first publication, create a short-lived npm granular access token with permission to publish this new package and suitable noninteractive publishing/2FA permissions. Add it as the GitHub repository Actions secret `NPM_TOKEN`; never commit it or paste it into an issue or chat. The workflow supplies it to npm only for the publish step. After the package exists, configure Trusted Publishing for owner `EHLO1`, repository `n8n-nodes-keeper-secrets-manager`, workflow `publish.yml`. Verify OIDC publishing on a subsequent release before removing and revoking the bootstrap token.
 

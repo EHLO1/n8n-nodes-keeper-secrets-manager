@@ -20,7 +20,14 @@ for (let attempt = 0; attempt < 12; attempt++) {
 	}
 	if (tags?.beta === version) {
 		if (tags.latest === version) {
-			execFileSync('npm', ['dist-tag', 'rm', name, 'latest'], { stdio: 'inherit' });
+			try {
+				execFileSync('npm', ['dist-tag', 'rm', name, 'latest'], { stdio: 'inherit' });
+			} catch {
+				console.warn(
+					`Beta is published, but npm did not permit removing latest. A maintainer must run: npm dist-tag rm ${name} latest`,
+				);
+				process.exit(0);
+			}
 		}
 		console.log(`Confirmed ${name}@${version} uses beta without promoting it to latest`);
 		process.exit(0);
