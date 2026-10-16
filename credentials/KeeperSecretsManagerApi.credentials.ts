@@ -35,12 +35,13 @@ export class KeeperSecretsManagerApi implements ICredentialType {
 		{
 			displayName: 'KSM Configuration JSON',
 			name: 'configJson',
-			type: 'string',
+			type: 'json',
 			typeOptions: { password: true },
 			default: '',
 			required: true,
 			displayOptions: { show: { source: ['json'] } },
-			description: 'Complete already-bound KSM configuration JSON, not a one-time token',
+			description:
+				'Paste the complete already-bound KSM configuration JSON, including multiline JSON. The input stays masked because it contains private encryption keys.',
 		},
 	];
 }

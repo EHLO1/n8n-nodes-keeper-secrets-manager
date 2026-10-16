@@ -21,7 +21,8 @@ export function parseObject(value: unknown): Record<string, unknown> {
 
 export function keeperOptions(c: ICredentialDataDecryptedObject): KeeperConfig {
 	let text: string;
-	if (c.source === 'json') text = String(c.configJson ?? '');
+	if (c.source === 'json')
+		text = typeof c.configJson === 'string' ? c.configJson : JSON.stringify(c.configJson ?? '');
 	else if (c.source === 'base64') {
 		const encoded = String(c.configBase64 ?? '').replace(/\s/g, '');
 		if (!encoded || !/^[A-Za-z0-9+/_-]+={0,2}$/.test(encoded) || encoded.length % 4 === 1)
@@ -129,33 +130,121 @@ export function createData(value: unknown): RecordData {
 	return validateData(value) as unknown as RecordData;
 }
 
-export function formatRecord(record: KeeperRecord, flat: boolean): IDataObject {
-	// Explicit output projection keeps internal protocol metadata out of workflows.
-	if (!flat)
-		return JSON.parse(
-			JSON.stringify({ recordUid: record.recordUid, revision: record.revision, data: record.data }),
-		) as IDataObject;
+export function formatRecord(record: KeeperRecord): IDataObject {
 	const data = record.data as unknown as {
 		title: string;
 		fields?: { label?: string; type: string; value?: unknown[] }[];
 		custom?: { label?: string; type: string; value?: unknown[] }[];
 	};
-	const map: Record<string, unknown> = Object.create(null);
+	const map: Record<string, unknown> = Object.assign(Object.create(null), {
+		recordUid: record.recordUid,
+		title: data.title,
+		revision: record.revision,
+		folderUid: record.folderUid ?? null,
+		folderName: record.folderName ?? null,
+		login: null,
+		password: null,
+		distinguishedName: null,
+		description: null,
+		id: null,
+		domain: null,
+	});
+	const used = new Set([
+		'recordUid',
+		'title',
+		'revision',
+		'folderUid',
+		'folderName',
+		'__proto__',
+		'constructor',
+		'prototype',
+	]);
 	for (const field of [...(data.fields ?? []), ...(data.custom ?? [])]) {
-		const key = (field.label || field.type || '').replace(/\s+/g, '').toLowerCase();
-		if (key) map[key] = field.value?.[0] ?? null;
+		let key = (field.label || field.type || '').replace(/\s+/g, '').toLowerCase();
+		if (!key) continue;
+		if (key === 'distinguishedname') key = 'distinguishedName';
+		// Protect metadata and retain fields with duplicate labels instead of overwriting.
+		if (
+			[
+				'recorduid',
+				'folderuid',
+				'foldername',
+				'title',
+				'revision',
+				'__proto__',
+				'constructor',
+				'prototype',
+			].includes(key.toLowerCase())
+		)
+			key = `field_${key}`;
+		const base = key;
+		let suffix = 2;
+		while (used.has(key)) key = `${base}_${suffix++}`;
+		used.add(key);
+		const values = field.value ?? [];
+		map[key] = values.length > 1 ? values : (values[0] ?? null);
 	}
-	return JSON.parse(
-		JSON.stringify({
-			recordUid: record.recordUid,
-			title: data.title,
-			revision: record.revision,
-			login: map.login ?? null,
-			password: map.password ?? null,
-			distinguishedName: map.distinguishedname ?? null,
-			description: map.description ?? null,
-			id: map.id ?? null,
-			domain: map.domain ?? null,
-		}),
-	) as IDataObject;
+	return JSON.parse(JSON.stringify(map)) as IDataObject;
+}
+
+export function structuredFields(value: unknown): IDataObject[] {
+	const rows = parseObject(value ?? {}).field ?? [];
+	if (!Array.isArray(rows)) throw new KeeperValidationError('Invalid structured fields');
+	const seen = new Set<string>();
+	return rows.map((row) => {
+		const field = parseObject(row);
+		const type = typeof field.type === 'string' ? field.type.trim() : '';
+		const label = typeof field.label === 'string' ? field.label : '';
+		if (!type) throw new KeeperValidationError('Each field requires a Keeper field type');
+		const identity = JSON.stringify([type, label]);
+		if (seen.has(identity))
+			throw new KeeperValidationError('Use distinct labels for fields with the same type');
+		seen.add(identity);
+		let values: unknown[];
+		if (field.valueType === 'json') {
+			let parsed: unknown;
+			try {
+				parsed =
+					typeof field.jsonValue === 'string' ? JSON.parse(field.jsonValue) : field.jsonValue;
+			} catch {
+				parsed = undefined;
+			}
+			if (!Array.isArray(parsed))
+				throw new KeeperValidationError('JSON field values must be an array');
+			values = parsed;
+		} else if (field.valueType === 'number') {
+			if (typeof field.numberValue !== 'number' || !Number.isFinite(field.numberValue))
+				throw new KeeperValidationError('Enter a finite numeric field value');
+			values = [field.numberValue];
+		} else if (field.valueType === 'boolean') {
+			if (typeof field.booleanValue !== 'boolean')
+				throw new KeeperValidationError('Enter a boolean field value');
+			values = [field.booleanValue];
+		} else {
+			if (field.valueType !== undefined && field.valueType !== 'text')
+				throw new KeeperValidationError('Unknown field value type');
+			if (typeof field.textValue !== 'string')
+				throw new KeeperValidationError('Enter a text field value');
+			values = [field.textValue];
+		}
+		return { type, ...(label ? { label } : {}), value: values } as IDataObject;
+	});
+}
+
+export function mergeFields(existing: IDataObject[], supplied: IDataObject[]): IDataObject[] {
+	const result = [...existing];
+	for (const field of supplied) {
+		const matches = result
+			.map((candidate, i) =>
+				candidate.type === field.type && (candidate.label || '') === (field.label || '') ? i : -1,
+			)
+			.filter((i) => i >= 0);
+		if (matches.length > 1)
+			throw new KeeperValidationError(
+				'Multiple existing fields match; use Raw JSON to update this record',
+			);
+		if (matches.length) result[matches[0]] = { ...result[matches[0]], ...field };
+		else result.push(field);
+	}
+	return result;
 }

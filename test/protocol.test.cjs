@@ -96,7 +96,22 @@ async function recordFixture(fixture) {
 			},
 		],
 	};
-	return { appKey, folderKey, recordKey, data, response };
+	const folderResponse = {
+		folders: [
+			{
+				folderUid: 'folder',
+				folderKey: await encoded(folderKey, appKey),
+				data: await cbcJson({ name: 'n8n' }, folderKey),
+			},
+		],
+	};
+	return { appKey, folderKey, recordKey, data, response, folderResponse };
+}
+
+async function cbcJson(value, key) {
+	return Buffer.from(
+		await sdk.platform.encryptWithKey(Buffer.from(JSON.stringify(value)), key, true),
+	).toString('base64');
 }
 
 test('AES-256-GCM accepts the NIST empty-message vector and rejects tampering', async () => {
@@ -214,7 +229,7 @@ test('signed requests decrypt direct, nested and flat folder-shared records', as
 	);
 	for (const record of result.records) assert.deepEqual(record.data, records.data);
 	assert.deepEqual(requests[0].payload.requestedRecords, ['direct', 'nested', 'flat']);
-	assert.deepEqual(Object.keys(result.records[0]), ['recordUid', 'revision', 'data']);
+	assert.deepEqual(Object.keys(result.records[0]), ['recordUid', 'revision', 'data', 'folderUid']);
 });
 
 test('filtered reads return only requested records even if the server includes extras', async () => {
@@ -227,10 +242,76 @@ test('filtered reads return only requested records even if the server includes e
 	);
 });
 
+test('folder names resolve direct containing subfolders, cache per execution, and match the SDK', async () => {
+	const fixture = configuration();
+	const records = await recordFixture(fixture);
+	const childKey = crypto.randomBytes(32);
+	const grandchildKey = crypto.randomBytes(32);
+	const wrapCbc = async (value) =>
+		Buffer.from(await sdk.platform.encryptWithKey(value, records.folderKey, true)).toString(
+			'base64',
+		);
+	const folders = [
+		{
+			folderUid: 'grandchild',
+			parent: 'child',
+			folderKey: await wrapCbc(grandchildKey),
+			data: await cbcJson({ name: 'Outline' }, grandchildKey),
+		},
+		{
+			folderUid: 'child',
+			parent: 'folder',
+			folderKey: await wrapCbc(childKey),
+			data: await cbcJson({ name: 'Intermediate' }, childKey),
+		},
+		...records.folderResponse.folders,
+	];
+	records.response.folders[0].records[0].innerFolderUid = 'grandchild';
+	const { client, requests } = clientServer(fixture, async ({ route }) =>
+		route === 'get_folders' ? { folders } : records.response,
+	);
+	const first = (await client.getSecrets(undefined, true)).records;
+	assert.equal(first.find((r) => r.recordUid === 'nested').folderName, 'Outline');
+	assert.equal(first.find((r) => r.recordUid === 'nested').folderUid, 'grandchild');
+	assert.equal(first.find((r) => r.recordUid === 'flat').folderName, 'n8n');
+	assert.equal(first.find((r) => r.recordUid === 'direct').folderUid, undefined);
+	await client.getSecrets(['nested'], true);
+	assert.equal(requests.filter((r) => r.route === 'get_folders').length, 1);
+	const reference = await sdk.getFolders({
+		storage: sdk.loadJsonConfig(JSON.stringify(fixture.config)),
+		queryFunction: async (_url, transmission) => ({
+			statusCode: 200,
+			data: await sdk.platform.encryptWithKey(
+				// SDK 17 requires root keys to precede children; the native client also handles reversed order.
+				Buffer.from(JSON.stringify({ folders: [...folders].reverse() })),
+				transmission.key,
+			),
+		}),
+	});
+	assert.deepEqual(reference.map((f) => f.name).sort(), ['Intermediate', 'Outline', 'n8n']);
+});
+
+test('invalid folder hierarchies and corrupt metadata fail without partial results', async () => {
+	const fixture = configuration();
+	const records = await recordFixture(fixture);
+	for (const folders of [
+		[{ ...records.folderResponse.folders[0], parent: 'folder' }],
+		[{ ...records.folderResponse.folders[0], parent: 'missing' }],
+		[{ ...records.folderResponse.folders[0], data: 'AAAA' }],
+	]) {
+		const { client } = clientServer(fixture, async ({ route }) =>
+			route === 'get_folders' ? { folders } : records.response,
+		);
+		await assert.rejects(client.getSecrets(undefined, true), wire.KeeperProtocolError);
+	}
+});
+
 test('the n8n node and credential test exercise encrypted traffic through their HTTP helpers', async () => {
 	const fixture = configuration();
 	const records = await recordFixture(fixture);
-	const server = clientServer(fixture, async () => records.response);
+	const server = clientServer(fixture, async ({ route }) =>
+		route === 'get_folders' ? records.folderResponse : records.response,
+	);
 	const node = new KeeperSecretsManager();
 	const ctx = {
 		getInputData: () => [{ json: {} }, { json: {} }],
@@ -329,7 +410,7 @@ test('SDK reads the same encrypted direct and nested fixtures as the native clie
 	const { client } = clientServer(fixture, async () => response);
 	const result = await client.getSecrets();
 	assert.deepEqual(
-		result.records,
+		result.records.map(({ recordUid, revision, data }) => ({ recordUid, revision, data })),
 		reference.records.map(({ recordUid, revision, data }) => ({ recordUid, revision, data })),
 	);
 });

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.4
+
+- Use flat output for every read, retaining the selected columns and adding custom fields, duplicate values, multi-value arrays, and direct folder UID/name.
+- Resolve folder names through Keeper's encrypted folder API, including nested subfolders, with an execution-local cache.
+- Label operations using Records, including Get All Records. Existing getAll workflow operations still execute.
+- Default create/update to structured fields with text, number, boolean, and JSON-array values. Structured updates preserve unrelated fields; Raw JSON remains available with formatted examples.
+- Add JSON validation to the masked configuration input. n8n still renders masked credential inputs on one line.
+- Live testing confirmed credentials and both read operations on n8n 2.10.3 with beta.3. New folder metadata and write controls still need live testing.
+
 ## 0.1.0-beta.3
 
 - Match Keeper SDK handling of null/empty `encryptedAppKey` response fields. An already-bound configuration is no longer rejected just because that JSON field is present without a binding envelope.

@@ -10,7 +10,10 @@
 - Added 30-second request timeouts, disabled redirects, bounded server-key rotation retries, and a 16 MiB response processing limit. This limit applies after n8n buffers the response. Network failures and throttling are not automatically retried.
 - Added synthetic encrypted endpoint tests and SDK comparison tests for encryption, key wrapping, request signatures, reads, writes, malformed responses and concurrent clients. Authentication failures stop reads instead of silently returning partial results.
 - Added `pnpm scan`: runs the official `@n8n/scan-community-package` static analyzer against both source and the unpacked package tarball. It leaves the scanner's restrictions enabled, including ignoring inline lint suppressions.
-- Updated frozen-lockfile pnpm CI and GitHub Actions publishing with provenance support. Publishing has not been performed.
+- Updated frozen-lockfile pnpm CI and published beta releases through GitHub Actions with provenance support.
+- Added flat custom-field output, direct-folder metadata, structured write inputs and SDK comparison tests for nested folder encryption.
+
+Live beta.3 testing confirmed credential creation, Get All and Get by UID on n8n 2.10.3. Folder names and write operations introduced or refined in beta.4 still need live testing.
 
 Local checks are useful evidence, not n8n verification or proof of live Keeper interoperability.
 

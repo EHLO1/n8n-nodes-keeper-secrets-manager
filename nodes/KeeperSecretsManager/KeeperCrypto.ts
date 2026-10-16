@@ -41,6 +41,22 @@ export function decrypt(
 	return result;
 }
 
+// Folder metadata uses Keeper's legacy AES-CBC format: 16-byte IV and PKCS#7 padding.
+// Only use inside an authenticated, decrypted API response.
+export function decryptFolder(data: Buffer, key: Buffer): Buffer {
+	if (data.length < 32 || data.length % 16 !== 0)
+		throw new KeeperProtocolError('Invalid Keeper folder envelope');
+	let result: Buffer | undefined;
+	try {
+		const decipher = createDecipheriv('aes-256-cbc', key, data.subarray(0, 16));
+		result = Buffer.concat([decipher.update(data.subarray(16)), decipher.final()]);
+	} catch {
+		result = undefined;
+	}
+	if (!result) throw new KeeperProtocolError('Could not decrypt Keeper folder metadata');
+	return result;
+}
+
 export function keeperFailureMessage(error: unknown): string {
 	if (error instanceof KeeperValidationError || error instanceof KeeperProtocolError)
 		return error.message;

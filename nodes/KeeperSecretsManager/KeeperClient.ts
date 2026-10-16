@@ -6,6 +6,7 @@ import {
 	createUid,
 	decodeBase64,
 	decrypt,
+	decryptFolder,
 	encrypt,
 	publicEncrypt,
 	KeeperProtocolError,
@@ -29,7 +30,13 @@ export type RecordData = {
 	notes?: string;
 	custom?: IDataObject[];
 };
-export type KeeperRecord = { recordUid: string; revision: number; data: RecordData };
+export type KeeperRecord = {
+	recordUid: string;
+	revision: number;
+	data: RecordData;
+	folderUid?: string;
+	folderName?: string;
+};
 type DeleteStatus = { recordUid: string; responseCode: string };
 
 function object(value: unknown): Record<string, unknown> {
@@ -66,6 +73,7 @@ export class KeeperClient {
 	private readonly folderKeys = new Map<string, Buffer>();
 	private recordKeys = new WeakMap<KeeperRecord, Buffer>();
 	private keyId: number;
+	private folderNames?: Promise<Map<string, string>>;
 
 	constructor(
 		private readonly config: KeeperConfig,
@@ -132,7 +140,43 @@ export class KeeperClient {
 		throw new KeeperProtocolError('Server key rotation limit reached');
 	}
 
-	async getSecrets(requestedRecords?: string[]): Promise<{ records: KeeperRecord[] }> {
+	private async getFolderNames(): Promise<Map<string, string>> {
+		const response = json(await this.query('get_folders', {}));
+		if (!Array.isArray(response.folders))
+			throw new KeeperProtocolError('Missing Keeper folder metadata');
+		const folders = new Map<string, Record<string, unknown>>();
+		for (const raw of response.folders) {
+			const folder = object(raw);
+			const uid = text(folder.folderUid);
+			if (folders.has(uid)) throw new KeeperProtocolError('Duplicate Keeper folder');
+			folders.set(uid, folder);
+		}
+		const names = new Map<string, string>();
+		for (const [uid, folder] of folders) {
+			let root = folder;
+			const visited = new Set([uid]);
+			while (root.parent) {
+				const parent = text(root.parent);
+				if (visited.has(parent)) throw new KeeperProtocolError('Invalid Keeper folder hierarchy');
+				visited.add(parent);
+				const ancestor = folders.get(parent);
+				if (!ancestor) throw new KeeperProtocolError('Missing Keeper parent folder');
+				root = ancestor;
+			}
+			const rootKey = unwrap(root.folderKey, this.config.appKey);
+			const key =
+				root === folder ? rootKey : decryptFolder(decodeBase64(folder.folderKey), rootKey);
+			if (key.length !== 32) throw new KeeperProtocolError('Invalid Keeper folder key');
+			const data = json(decryptFolder(decodeBase64(folder.data), key));
+			names.set(uid, text(data.name));
+		}
+		return names;
+	}
+
+	async getSecrets(
+		requestedRecords?: string[],
+		includeFolderNames = false,
+	): Promise<{ records: KeeperRecord[] }> {
 		const response = json(
 			await this.query('get_secret', requestedRecords ? { requestedRecords } : {}),
 		);
@@ -152,7 +196,7 @@ export class KeeperClient {
 		}
 		const records: KeeperRecord[] = [];
 		const seen = new Set<string>();
-		const read = (raw: unknown, wrappingKey: Buffer) => {
+		const read = (raw: unknown, wrappingKey: Buffer, containingFolderUid?: string) => {
 			const record = object(raw);
 			const uid = text(record.recordUid);
 			const key = unwrap(record.recordKey, wrappingKey);
@@ -172,6 +216,10 @@ export class KeeperClient {
 				recordUid: uid,
 				revision: record.revision as number,
 				data: data as RecordData,
+				folderUid:
+					typeof record.innerFolderUid === 'string' && record.innerFolderUid
+						? record.innerFolderUid
+						: containingFolderUid,
 			};
 			this.recordKeys.set(result, key);
 			records.push(result);
@@ -187,7 +235,13 @@ export class KeeperClient {
 		}
 		for (const folder of folders) {
 			const key = this.folderKeys.get(text(folder.folderUid))!;
-			for (const record of array(folder.records)) read(record, key);
+			for (const record of array(folder.records)) read(record, key, text(folder.folderUid));
+		}
+		if (includeFolderNames && records.some((record) => record.folderUid)) {
+			this.folderNames ??= this.getFolderNames();
+			const names = await this.folderNames;
+			for (const record of records)
+				if (record.folderUid) record.folderName = names.get(record.folderUid);
 		}
 		// Fail closed on decryption errors; never silently return partial secret sets.
 		const requested = requestedRecords ? new Set(requestedRecords) : undefined;

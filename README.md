@@ -2,11 +2,11 @@
 
 Read and manage Keeper Secrets Manager records in n8n workflows.
 
-**Development status:** this package is not verified by n8n. It implements the Keeper protocol using Node.js cryptography and n8n HTTP helpers, with no external runtime dependencies. The official Keeper SDK is used only for development comparison tests. Build, unit tests, strict lint and local source/package static analysis pass; live Keeper and n8n integration testing is still required. See [VERIFICATION.md](VERIFICATION.md) for the remaining work.
+**Development status:** this package is not verified by n8n. It implements the Keeper protocol using Node.js cryptography and n8n HTTP helpers, with no external runtime dependencies. The official Keeper SDK is used only for development comparison tests. Credentials and both read operations have passed live testing on n8n 2.10.3. New folder metadata and create/update/delete still need live testing. See [VERIFICATION.md](VERIFICATION.md) for the remaining work.
 
 ## Installation
 
-For self-hosted n8n, follow the [community-node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) using `n8n-nodes-keeper-secrets-manager` once a release is published. This repository does not imply that a release is already available. Unverified packages cannot be installed on n8n Cloud through the verified-node catalog.
+For self-hosted n8n, follow the [community-node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) using the exact beta version below. Unverified packages cannot be installed on n8n Cloud through the verified-node catalog.
 
 For local development, use Node.js 24 and pnpm 12.11.2:
 
@@ -36,11 +36,11 @@ Configuration fields contain private keys and are masked in the credential edito
 
 | Operation          | Behavior                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| Get Many           | Read all records shared with the application; one output item per record                                |
-| Get Secrets by UID | Read a comma- or whitespace-separated list of record UIDs; fail if any requested record is inaccessible |
-| Create a Secret    | Create a record in a root shared folder accessible to the application                                   |
-| Update a Secret    | Apply a top-level patch to an existing record                                                           |
-| Delete Secrets     | Delete the specified records after enabling Confirm Deletion                                            |
+| Get All Records    | Read all records shared with the application; one output item per record                                |
+| Get Records by UID | Read a comma- or whitespace-separated list of record UIDs; fail if any requested record is inaccessible |
+| Create a Record    | Create a record in a root shared folder accessible to the application                                   |
+| Update a Record    | Update selected fields or apply a Raw JSON patch                                                        |
+| Delete Records     | Delete the specified records after enabling Confirm Deletion                                            |
 
 Create, update, and delete require the corresponding Keeper application permissions. Operations run once per input item; avoid feeding multiple items to a write unless you intend multiple writes. Parameter expressions such as `{{ $json.recordUid }}` are evaluated for each input item. Outputs retain their input-item links.
 
@@ -50,13 +50,19 @@ Reads support exclusion by UID. Exclusion filters output after retrieval; it doe
 
 ### Read a record
 
-Connect a Manual Trigger to Keeper Secrets Manager, select **Get Secrets by UID**, and enter a record UID or `{{ $json.recordUid }}`. Select **Raw Record Data** to receive `recordUid`, `revision`, and `data` with Keeper’s structured fields and custom fields. Encryption keys, attachment URLs, and other protocol metadata are omitted. Attachments, Keeper notation, folder management, and one-time token binding are outside this node's scope.
+Connect a Manual Trigger to Keeper Secrets Manager, select **Get Records by UID**, and enter one or more record UIDs or `{{ $json.recordUid }}`. Every read returns flat output. Encryption keys, attachment URLs, and other protocol metadata are omitted. Attachment downloads, Keeper notation, folder management, and one-time token binding are outside this node's scope.
 
-**Flat (Selected Fields)** provides `recordUid`, `title`, `revision`, `login`, `password`, `distinguishedName`, `description`, `id`, and `domain`. It uses the first value of each matching field; labels take precedence over field types and later duplicate names overwrite earlier ones. Use raw output to retain arrays, duplicate fields, and other record properties.
+Flat output retains `recordUid`, `title`, `revision`, `login`, `password`, `distinguishedName`, `description`, `id`, and `domain`, and adds `folderUid` and `folderName` for the direct containing folder. Directly shared records without folder metadata have null folder values. Resolving names makes one additional encrypted `get_folders` request, cached for the execution; a failed folder request or malformed metadata fails the read.
+
+All values from both `fields` and `custom` are flattened. Labels take precedence over types; whitespace is removed and names are lowercased, with `distinguishedName` retained for compatibility. Empty values become null, single values become scalars or objects, and multiple values remain arrays. Duplicate names gain `_2`, `_3`, etc.; names conflicting with record metadata use a `field_` prefix. Record keys and protocol metadata never become output columns.
+
+Beta.4 intentionally removes the Raw Record Data output option. Existing read nodes also return flat output; reselect **Get All Records** on nodes previously configured as Get Many. The previous `getAll` operation value still executes.
 
 ### Create a record
 
-Choose **Create a Secret**, specify the root shared folder UID, and provide Record Data JSON:
+Choose **Create a Record** and specify the root shared folder UID. This is required: Keeper wraps the new record key using that shared folder's key. **Structured Fields** is the default: enter the title and record type, add Fields and Custom Fields, and optionally add notes. Each field has a Keeper type (for example `login`, `password`, or `url`), an optional label, and a text, number, boolean, or JSON-array value. Compound Keeper values such as host objects use JSON Array: `[{"hostName":"db.example.com","port":"5432"}]`.
+
+Alternatively, choose **Raw JSON** and provide Record Data JSON:
 
 ```json
 {
@@ -71,13 +77,15 @@ Choose **Create a Secret**, specify the root shared folder UID, and provide Reco
 
 ### Update a record
 
-Choose **Update a Secret**, specify its UID, and provide Update Data JSON:
+Choose **Update a Record** and specify its UID. With **Structured Fields**, add only the properties and field values to change. Existing fields are matched by exact Keeper type and label; other fields and their metadata remain unchanged. New fields are appended. An empty JSON value array clears a matching field's values. Omitted properties are preserved; supplied empty notes clear the notes. Ambiguous duplicate matches are rejected.
+
+Alternatively, choose **Raw JSON** and provide Update Data JSON:
 
 ```json
 { "title": "Updated account", "notes": "Managed by n8n" }
 ```
 
-Omitted properties remain unchanged. Supplied `fields` or `custom` arrays replace the entire existing array, including with an empty array. Empty patches and unsupported top-level properties are rejected.
+For Raw JSON, omitted properties remain unchanged. Supplied `fields` or `custom` arrays replace the entire existing array, including with an empty array. Empty patches and unsupported top-level properties are rejected. Examples in the JSON editor are formatted across multiple lines.
 
 ### Handle failures
 
@@ -104,7 +112,7 @@ Commit and push the release changes, then push the matching tag `0.1.0-beta.1`. 
 Once the workflow succeeds, a self-hosted n8n Owner/Admin can open **Settings → Community Nodes → Install** and enter:
 
 ```text
-n8n-nodes-keeper-secrets-manager@0.1.0-beta.1
+n8n-nodes-keeper-secrets-manager@0.1.0-beta.4
 ```
 
 Accept the unverified community-node notice and install. The Docker host does not need to compile this package. Community-node installation and unverified packages must be enabled by the instance administrator. Ensure the n8n data directory uses persistent storage so the installed package survives container replacement; queue-mode workers must also have the package available.
@@ -117,7 +125,7 @@ The first beta is intended for testing with a dedicated Keeper application and d
 
 The workflows use pnpm with the frozen lockfile. Once all strict checks and live tests pass, run `pnpm release` from a clean `main` checkout to create and push a version tag. GitHub Actions tests the package, checks the tag version, runs source and tarball static analysis, and runs the n8n release command with provenance. The n8n CLI invokes npm internally for registry publication; project dependency management remains pnpm.
 
-Publishing and Creator Portal submission have not been performed.
+Beta publishing has been performed; Creator Portal submission remains pending.
 
 ## Resources
 

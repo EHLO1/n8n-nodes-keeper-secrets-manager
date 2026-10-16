@@ -30,8 +30,10 @@ function execute(parameters, count = 1, continueOnFail = false) {
 			position: [0, 0],
 			parameters: {},
 		}),
-		getNodeParameter: (name, index) =>
-			typeof parameters[name] === 'function' ? parameters[name](index) : parameters[name],
+		getNodeParameter: (name, index, fallback) =>
+			typeof parameters[name] === 'function'
+				? parameters[name](index)
+				: (parameters[name] ?? fallback),
 		continueOnFail: () => continueOnFail,
 	});
 }
@@ -80,20 +82,39 @@ test('invalid record patches fail without echoing their secret values', () => {
 	assert.throws(() => helpers.uidList(' , '));
 });
 
-test('raw output excludes SDK metadata and flat output exposes selected values', () => {
+test('flat output preserves custom values, duplicates and arrays without exposing protocol metadata', () => {
 	const record = {
 		recordUid: 'a',
 		revision: 1,
 		recordKey: 'do-not-output',
 		files: [{ url: 'do-not-output' }],
-		data: { title: 'Test', fields: [{ type: 'password', value: ['secret'] }] },
+		folderUid: 'folder',
+		folderName: 'n8n',
+		data: {
+			title: 'Test',
+			fields: [{ type: 'password', value: ['secret'] }],
+			custom: [
+				{ type: 'text', label: 'File Name', value: ['example.txt'] },
+				{ type: 'password', value: ['second'] },
+				{ type: 'text', label: 'title', value: ['custom title'] },
+				{ type: 'text', label: '__proto__', value: ['safe'] },
+				{ type: 'text', label: 'Tags', value: ['a', 'b'] },
+			],
+		},
 	};
-	assert.deepEqual(Object.keys(helpers.formatRecord(record, false)), [
-		'recordUid',
-		'revision',
-		'data',
-	]);
-	assert.equal(helpers.formatRecord(record, true).password, 'secret');
+	const flat = helpers.formatRecord(record);
+	assert.equal(flat.recordKey, undefined);
+	assert.equal(flat.files, undefined);
+	assert.equal(flat.data, undefined);
+	assert.equal(flat.password, 'secret');
+	assert.equal(flat.password_2, 'second');
+	assert.equal(flat.filename, 'example.txt');
+	assert.equal(flat.title, 'Test');
+	assert.equal(flat.field_title, 'custom title');
+	assert.equal(flat.field___proto__, 'safe');
+	assert.deepEqual(flat.tags, ['a', 'b']);
+	assert.equal(flat.folderName, 'n8n');
+	assert.equal(flat.login, null);
 });
 
 test('reads evaluate expressions per item and preserve pairing after exclusions', async () => {
@@ -149,7 +170,12 @@ test('update preserves omitted properties, replaces arrays, and retains revision
 	KeeperClient.prototype.updateSecret = async (record) => {
 		updated = record;
 	};
-	await execute({ operation: 'update', recordUid: 'a', updateData: { title: 'New', fields: [] } });
+	await execute({
+		operation: 'update',
+		inputMode: 'json',
+		recordUid: 'a',
+		updateData: { title: 'New', fields: [] },
+	});
 	assert.deepEqual(updated.data, { type: 'login', title: 'New', notes: 'Keep', fields: [] });
 	assert.equal(updated.revision, 5);
 });
@@ -160,10 +186,122 @@ test('invalid create makes no request', async () => {
 		called = true;
 	};
 	await assert.rejects(
-		execute({ operation: 'create', folderUid: 'folder', recordData: { title: 'Test' } }),
+		execute({
+			operation: 'create',
+			inputMode: 'json',
+			folderUid: 'folder',
+			recordData: { title: 'Test' },
+		}),
 		/Create requires/,
 	);
 	assert.equal(called, false);
+});
+
+test('structured create evaluates input values and preserves Keeper value types', async () => {
+	const created = [];
+	KeeperClient.prototype.createSecret = async (folder, data) => {
+		created.push({ folder, data });
+		return `created-${created.length}`;
+	};
+	await execute(
+		{
+			operation: 'create',
+			folderUid: 'folder',
+			recordType: 'login',
+			title: (i) => `Account ${i}`,
+			recordFields: (i) => ({
+				field: [
+					{ type: 'login', textValue: `user${i}` },
+					{ type: 'checkbox', valueType: 'boolean', booleanValue: false },
+					{ type: 'text', label: 'Count', valueType: 'number', numberValue: 0 },
+					{
+						type: 'host',
+						valueType: 'json',
+						jsonValue: '[{"hostName":"db.example.com","port":"5432"}]',
+					},
+				],
+			}),
+			customFields: {
+				field: [{ type: 'text', label: 'Empty', valueType: 'json', jsonValue: '[]' }],
+			},
+		},
+		2,
+	);
+	assert.equal(created[1].data.title, 'Account 1');
+	assert.deepEqual(
+		created[1].data.fields.map((f) => f.value),
+		[['user1'], [false], [0], [{ hostName: 'db.example.com', port: '5432' }]],
+	);
+	assert.deepEqual(created[1].data.custom[0].value, []);
+});
+
+test('structured update merges exact type/label matches and preserves untouched fields and metadata', async () => {
+	KeeperClient.prototype.getSecrets = async () => ({
+		records: [
+			{
+				recordUid: 'a',
+				revision: 9,
+				data: {
+					type: 'login',
+					title: 'Production',
+					notes: 'Keep',
+					fields: [
+						{ type: 'password', value: ['old'], required: true },
+						{ type: 'text', label: 'Other', value: ['keep'] },
+					],
+					custom: [{ type: 'text', label: 'Environment', value: ['dev'] }],
+				},
+			},
+		],
+	});
+	let updated;
+	KeeperClient.prototype.updateSecret = async (record) => {
+		updated = record;
+	};
+	await execute({
+		operation: 'update',
+		recordUid: 'a',
+		updateOptions: { notes: '' },
+		recordFields: { field: [{ type: 'password', textValue: 'new' }] },
+		customFields: { field: [{ type: 'text', label: 'Environment', textValue: 'production' }] },
+	});
+	assert.equal(updated.revision, 9);
+	assert.equal(updated.data.title, 'Production');
+	assert.equal(updated.data.notes, '');
+	assert.deepEqual(updated.data.fields, [
+		{ type: 'password', value: ['new'], required: true },
+		{ type: 'text', label: 'Other', value: ['keep'] },
+	]);
+	assert.deepEqual(updated.data.custom[0].value, ['production']);
+});
+
+test('invalid or ambiguous structured inputs are rejected without exposing values', async () => {
+	for (const field of [
+		{ type: 'text', valueType: 'json', jsonValue: 'private-invalid' },
+		{ type: 'text', valueType: 'json', jsonValue: '{}' },
+		{ type: 'text', valueType: 'number', numberValue: Infinity },
+		{ type: 'text', valueType: 'boolean', booleanValue: 'false' },
+	])
+		assert.throws(
+			() => helpers.structuredFields({ field: [field] }),
+			(error) => !error.message.includes('private-invalid'),
+		);
+	assert.throws(
+		() =>
+			helpers.structuredFields({
+				field: [
+					{ type: 'text', textValue: '' },
+					{ type: 'text', textValue: '' },
+				],
+			}),
+		/distinct labels/,
+	);
+	assert.throws(
+		() =>
+			helpers.mergeFields([{ type: 'text' }, { type: 'text' }], [{ type: 'text', value: ['new'] }]),
+		/Multiple existing/,
+	);
+	await assert.rejects(execute({ operation: 'update', recordUid: 'a' }), /at least one property/);
 });
 
 test('deletion requires confirmation and partial failures stop by default', async () => {
