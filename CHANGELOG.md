@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-beta.1
+
+Initial prerelease for self-hosted n8n integration testing. Not verified by n8n.
 
 - Remove the Example scaffold and npm lockfile; use pinned pnpm and node CLI versions.
 - Add node discovery metadata, credential icons and a custom credential connection test.

@@ -24,6 +24,25 @@ jobs:
       - run: pnpm scan
       - name: Verify tag matches package version
         run: node -e "const p = require('./package.json'); if (process.env.GITHUB_REF_NAME.replace(/^v/, '') !== p.version) process.exit(1)"
-      # Configure npm Trusted Publishing for this repository and publish.yml.
+      - name: Select npm release channel
+        id: channel
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          const prerelease = version.split('-')[1];
+          if (prerelease && !/^beta\.\d+$/.test(prerelease)) {
+            throw new Error('Only stable or beta.N releases are supported by this workflow');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `tag=${prerelease ? 'beta' : 'latest'}\n`);
+          NODE
+      # First publication: add a short-lived granular npm token as NPM_TOKEN.
+      # Afterward, configure npm Trusted Publishing for this repo/publish.yml
+      # and remove NPM_TOKEN. npm then authenticates using GitHub OIDC.
       # The n8n CLI invokes npm publish internally with provenance enabled.
-      - run: pnpm release
+      - name: Publish with n8n-node
+        run: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TAG: ${{ steps.channel.outputs.tag }}
+          NPM_CONFIG_ACCESS: public

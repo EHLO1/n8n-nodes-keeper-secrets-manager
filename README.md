@@ -93,7 +93,29 @@ The package builds against `n8n-workflow` 2.16.0 and uses the n8n node CLI 0.52.
 
 ## Publishing
 
-The workflows use pnpm with the frozen lockfile. Configure npm Trusted Publishing for repository `ehlo1/n8n-nodes-keeper-secrets-manager`, workflow `publish.yml`. Once all strict checks and live tests pass, run `pnpm release` from a clean `main` checkout to create and push a version tag. GitHub Actions tests the package, checks the tag version, runs source and tarball static analysis, and runs the n8n release command with provenance. The n8n CLI invokes npm internally for registry publication; project dependency management remains pnpm.
+### First beta and GUI installation
+
+The first test release is `0.1.0-beta.1`, published under npm's `beta` dist-tag. It is not promoted to `latest`. The publish workflow selects `beta` for versions ending in `-beta.N`, and `latest` for stable versions.
+
+For the first publication, create a short-lived npm granular access token with permission to publish this new package and suitable noninteractive publishing/2FA permissions. Add it as the GitHub repository Actions secret `NPM_TOKEN`; never commit it or paste it into an issue or chat. The workflow supplies it to npm only for the publish step. After the package exists, configure Trusted Publishing for owner `EHLO1`, repository `n8n-nodes-keeper-secrets-manager`, workflow `publish.yml`. Verify OIDC publishing on a subsequent release before removing and revoking the bootstrap token.
+
+Commit and push the release changes, then push the matching tag `0.1.0-beta.1`. The tag triggers tests, scans and publication through `n8n-node release` with provenance. Do not publish directly from a local machine.
+
+Once the workflow succeeds, a self-hosted n8n Owner/Admin can open **Settings → Community Nodes → Install** and enter:
+
+```text
+n8n-nodes-keeper-secrets-manager@0.1.0-beta.1
+```
+
+Accept the unverified community-node notice and install. The Docker host does not need to compile this package. Community-node installation and unverified packages must be enabled by the instance administrator. Ensure the n8n data directory uses persistent storage so the installed package survives container replacement; queue-mode workers must also have the package available.
+
+Use the exact beta version for repeatable tests. The `@beta` tag also works for the initial installation, but n8n resolves it once and does not continuously follow that tag. Updates to a specific later beta may require uninstalling and reinstalling the target version; back up test workflows first.
+
+The first beta is intended for testing with a dedicated Keeper application and disposable records. It does not imply n8n verification or completion of live integration testing.
+
+### Subsequent releases
+
+The workflows use pnpm with the frozen lockfile. Once all strict checks and live tests pass, run `pnpm release` from a clean `main` checkout to create and push a version tag. GitHub Actions tests the package, checks the tag version, runs source and tarball static analysis, and runs the n8n release command with provenance. The n8n CLI invokes npm internally for registry publication; project dependency management remains pnpm.
 
 Publishing and Creator Portal submission have not been performed.
 
