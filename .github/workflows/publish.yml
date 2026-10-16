@@ -46,3 +46,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_TAG: ${{ steps.channel.outputs.tag }}
           NPM_CONFIG_ACCESS: public
+      - name: Keep beta off latest
+        if: steps.channel.outputs.tag == 'beta'
+        run: node scripts/ensure-beta-tag.mjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
