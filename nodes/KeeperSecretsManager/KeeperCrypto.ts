@@ -23,11 +23,44 @@ export function encrypt(data: Uint8Array, key: Uint8Array): Buffer {
 	return Buffer.concat([iv, cipher.update(data), cipher.final(), cipher.getAuthTag()]);
 }
 
-export function decrypt(data: Uint8Array, key: Uint8Array): Buffer {
+export function decrypt(
+	data: Uint8Array,
+	key: Uint8Array,
+	context: 'response' | 'record key' | 'record data' | 'application data' = 'response',
+): Buffer {
 	if (data.length < 28) throw new KeeperProtocolError('Invalid encrypted envelope');
-	const decipher = createDecipheriv('aes-256-gcm', key, data.subarray(0, 12));
-	decipher.setAuthTag(data.subarray(data.length - 16));
-	return Buffer.concat([decipher.update(data.subarray(12, -16)), decipher.final()]);
+	let result: Buffer | undefined;
+	try {
+		const decipher = createDecipheriv('aes-256-gcm', key, data.subarray(0, 12));
+		decipher.setAuthTag(data.subarray(data.length - 16));
+		result = Buffer.concat([decipher.update(data.subarray(12, -16)), decipher.final()]);
+	} catch {
+		result = undefined;
+	}
+	if (!result) throw new KeeperProtocolError(`Could not authenticate Keeper ${context}`);
+	return result;
+}
+
+export function keeperFailureMessage(error: unknown): string {
+	if (error instanceof KeeperValidationError || error instanceof KeeperProtocolError)
+		return error.message;
+	const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+	const messages: Record<string, string> = {
+		ENOTFOUND: 'Could not resolve the Keeper hostname from the n8n server',
+		EAI_AGAIN: 'DNS lookup for Keeper failed temporarily on the n8n server',
+		ECONNREFUSED: 'The connection to Keeper was refused',
+		ECONNRESET: 'The connection to Keeper was reset',
+		ETIMEDOUT: 'The connection to Keeper timed out',
+		ECONNABORTED: 'The Keeper HTTP request timed out or was aborted',
+		ERR_TLS_CERT_ALTNAME_INVALID: 'The Keeper TLS certificate hostname could not be verified',
+		UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'The Keeper TLS certificate chain could not be verified',
+		SELF_SIGNED_CERT_IN_CHAIN:
+			'A self-signed certificate was detected in the Keeper TLS connection',
+		CERT_HAS_EXPIRED: 'The Keeper TLS certificate has expired',
+	};
+	return typeof code === 'string' && Object.prototype.hasOwnProperty.call(messages, code)
+		? messages[code]
+		: 'Could not connect to Keeper. Check the bound configuration, application permissions, and connectivity.';
 }
 
 // Keeper ECIES: ephemeral uncompressed P-256 point || GCM envelope, with a

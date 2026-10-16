@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-keeper-secrets-manager",
-	"version": "0.1.0-beta.1",
+	"version": "0.1.0-beta.2",
 	"description": "Keeper Secrets Manager node and credentials for n8n",
 	"license": "MIT",
 	"homepage": "https://github.com/ehlo1/n8n-nodes-keeper-secrets-manager#readme",
@@ -54,6 +54,7 @@
 		"@n8n/node-cli": "0.52.3",
 		"@n8n/scan-community-package": "0.39.0",
 		"eslint": "9.32.0",
+		"n8n-core": "2.10.1",
 		"prettier": "3.6.2",
 		"release-it": "^21.1.0",
 		"typescript": "5.9.2"

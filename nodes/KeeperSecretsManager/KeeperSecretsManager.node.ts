@@ -9,6 +9,7 @@ import type {
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { KeeperClient } from './KeeperClient';
 import { credentialTransport, executionTransport } from './KeeperTransport';
+import { keeperFailureMessage } from './KeeperCrypto';
 import {
 	keeperOptions,
 	uidList,
@@ -26,10 +27,7 @@ const keeperCredentialTest: ICredentialTestFunction = async function (credential
 	} catch (error) {
 		return {
 			status: 'Error',
-			message:
-				error instanceof KeeperValidationError
-					? error.message
-					: 'Could not connect to Keeper. Check the bound configuration, application permissions, and connectivity.',
+			message: keeperFailureMessage(error),
 		};
 	}
 };

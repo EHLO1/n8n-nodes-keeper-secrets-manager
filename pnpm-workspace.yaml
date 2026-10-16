@@ -1,4 +1,7 @@
 allowBuilds:
+  # The n8n HTTP-helper regression does not use Sentry's optional native profilers.
+  '@sentry/node-cpu-profiler': false
+  '@sentry/node-native-stacktrace': false
   cpu-features: true
   eslint-plugin-n8n-nodes-base: true
   isolated-vm: true

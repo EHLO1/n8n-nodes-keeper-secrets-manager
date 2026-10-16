@@ -42,17 +42,24 @@ function text(value: unknown): string {
 	return value;
 }
 function array(value: unknown): unknown[] {
-	if (value === undefined) return [];
+	if (value === undefined || value === null) return [];
 	if (!Array.isArray(value)) throw new KeeperProtocolError('Invalid Keeper list');
 	return value;
 }
 function unwrap(value: unknown, key: Buffer): Buffer {
-	const result = decrypt(decodeBase64(value), key);
+	const result = decrypt(decodeBase64(value), key, 'record key');
 	if (result.length !== 32) throw new KeeperProtocolError('Invalid Keeper key');
 	return result;
 }
 function json(bytes: Buffer): Record<string, unknown> {
-	return object(JSON.parse(bytes.toString('utf8')));
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(bytes.toString('utf8'));
+	} catch {
+		parsed = undefined;
+	}
+	if (parsed === undefined) throw new KeeperProtocolError('Keeper returned invalid JSON');
+	return object(parsed);
 }
 
 export class KeeperClient {
@@ -102,13 +109,21 @@ export class KeeperClient {
 					return response.body.length ? decrypt(response.body, transmissionKey) : Buffer.alloc(0);
 				// Do not decode or expose arbitrary remote error payloads.
 				if (response.body.length > 65_536) throw new KeeperProtocolError('Keeper rejected request');
-				const error = json(response.body);
+				let error: Record<string, unknown> | undefined;
+				try {
+					error = json(response.body);
+				} catch {
+					error = undefined;
+				}
 				if (
+					!error ||
 					(error.result_code ?? error.error) !== 'key' ||
 					!Number.isInteger(error.key_id) ||
 					!serverKey(error.key_id as number)
 				)
-					throw new KeeperProtocolError('Keeper rejected request');
+					throw new KeeperProtocolError(
+						`Keeper rejected the request (HTTP ${response.statusCode})`,
+					);
 				this.keyId = error.key_id as number;
 			} finally {
 				transmissionKey.fill(0);
@@ -123,7 +138,9 @@ export class KeeperClient {
 		);
 		if (response.encryptedAppKey !== undefined)
 			throw new KeeperProtocolError('Already-bound configuration required');
-		if (response.records === undefined && response.folders === undefined)
+		if (response.appData !== undefined && response.appData !== null)
+			json(decrypt(decodeBase64(response.appData), this.config.appKey, 'application data'));
+		if (response.records == null && response.folders == null && response.appData == null)
 			throw new KeeperProtocolError('Missing Keeper records');
 		this.folderKeys.clear();
 		this.recordKeys = new WeakMap();
@@ -137,7 +154,7 @@ export class KeeperClient {
 			const record = object(raw);
 			const uid = text(record.recordUid);
 			const key = unwrap(record.recordKey, wrappingKey);
-			const data = json(decrypt(decodeBase64(record.data), key));
+			const data = json(decrypt(decodeBase64(record.data), key, 'record data'));
 			if (
 				!Number.isSafeInteger(record.revision) ||
 				(record.revision as number) < 0 ||

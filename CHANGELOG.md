@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.2
+
+- Accept authenticated Keeper application responses with no records or with null optional record/folder arrays.
+- Report safe HTTP status, network/TLS, and decryption-stage errors in credential tests without exposing remote payloads, configuration or secret values.
+- Handle plaintext error responses from n8n's legacy credential-test HTTP adapter while requiring binary success responses.
+- Add an integration regression using the exact n8n-core library shipped with n8n 2.10.3, a local HTTP server, and synthetic encrypted Keeper responses.
+
 ## 0.1.0-beta.1
 
 Initial prerelease for self-hosted n8n integration testing. Not verified by n8n.

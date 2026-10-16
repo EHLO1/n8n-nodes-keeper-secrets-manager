@@ -23,6 +23,22 @@ const {
 } = require('./fixtures.cjs');
 
 const originalServerKey = keys.serverKey;
+
+test('safe diagnostics distinguish network errors without echoing arbitrary error details', () => {
+	for (const [code, expected] of [
+		['ENOTFOUND', 'resolve'],
+		['ETIMEDOUT', 'timed out'],
+		['SELF_SIGNED_CERT_IN_CHAIN', 'self-signed'],
+	]) {
+		assert.match(
+			wire.keeperFailureMessage(Object.assign(new Error('private payload'), { code })),
+			new RegExp(expected),
+		);
+	}
+	for (const error of [new Error('private payload'), { code: 'private payload' }, null]) {
+		assert.equal(wire.keeperFailureMessage(error).includes('private payload'), false);
+	}
+});
 afterEach(() => {
 	keys.serverKey = originalServerKey;
 	sdk.platform.cleanKeyCache();

@@ -11,7 +11,20 @@ export type KeeperTransport = (request: KeeperRequest) => Promise<KeeperResponse
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
 function responseBytes(response: { statusCode: number; body: unknown }): KeeperResponse {
+	if (
+		!Number.isInteger(response.statusCode) ||
+		response.statusCode < 100 ||
+		response.statusCode > 599
+	)
+		throw new KeeperProtocolError('Invalid HTTP helper response status');
 	const value = response.body;
+	// The legacy helper can return a decoded error body even with encoding:null.
+	// Successful encrypted responses must remain bytes; error bodies are plaintext JSON.
+	if (typeof value === 'string' && response.statusCode !== 200) {
+		if (Buffer.byteLength(value, 'utf8') > MAX_RESPONSE_BYTES)
+			throw new KeeperProtocolError('Keeper response too large');
+		return { statusCode: response.statusCode, body: Buffer.from(value, 'utf8') };
+	}
 	// Never coerce decoded strings/objects into ciphertext: the adapter must return bytes.
 	if (!Buffer.isBuffer(value) && !(value instanceof Uint8Array) && !(value instanceof ArrayBuffer))
 		throw new KeeperProtocolError('Invalid binary response');

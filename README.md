@@ -89,7 +89,7 @@ Record values, including passwords, appear in node output and may be saved in n8
 
 ## Compatibility and testing
 
-The package builds against `n8n-workflow` 2.16.0 and uses the n8n node CLI 0.52.3. A minimum compatible n8n application release has not yet been established by live testing. No live Keeper or n8n integration test has been completed in this review. Tests use synthetic configurations, an encrypted mock Keeper endpoint, known-answer cryptographic vectors, and the official SDK as a comparison oracle. They verify protocol formats without accessing a Keeper account; they do not replace live integration testing.
+The package builds against `n8n-workflow` 2.16.0 and uses the n8n node CLI 0.52.3. A regression test exercises the actual credential-test HTTP helper from `n8n-core` 2.10.1, shipped with n8n 2.10.3, over a local HTTP server with synthetic encrypted Keeper responses. It covers reads, empty applications, HTTP rejection and decryption errors. A minimum compatible n8n application release has not yet been established by live testing. These tests and the SDK comparisons do not replace testing against a real Keeper application in n8n.
 
 ## Publishing
 
