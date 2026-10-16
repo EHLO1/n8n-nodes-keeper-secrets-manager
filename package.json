@@ -1,35 +1,64 @@
 {
-  "name": "n8n-nodes-keeper-secrets-manager",
-  "version": "0.1.1",
-  "description": "Internal Keeper Secrets Manager node and credentials for n8n",
-  "license": "MIT",
-  "keywords": [
-    "n8n-community-node-package"
-  ],
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.json"
-  },
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "credentials": [
-      "dist/credentials/KeeperSecretsManagerApi.credentials.js"
-    ],
-    "nodes": [
-      "dist/nodes/KeeperSecretsManager/KeeperSecretsManager.node.js"
-    ]
-  },
-  "dependencies": {
-    "@keeper-security/secrets-manager-core": "17.0.0"
-  },
-  "peerDependencies": {
-    "n8n-workflow": "*"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.0.0",
-    "n8n-workflow": "*"
-  }
+	"name": "n8n-nodes-keeper-secrets-manager",
+	"version": "0.1.0",
+	"description": "Keeper Secrets Manager node and credentials for n8n",
+	"license": "MIT",
+	"homepage": "https://github.com/ehlo1/n8n-nodes-keeper-secrets-manager#readme",
+	"packageManager": "pnpm@12.11.2",
+	"engines": {
+		"node": ">=22.16"
+	},
+	"keywords": [
+		"n8n-community-node-package"
+	],
+	"author": {
+		"name": "Joe Ley",
+		"email": "joseph.ley@outlook.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ehlo1/n8n-nodes-keeper-secrets-manager.git"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"test": "pnpm build && node --test test/*.test.cjs",
+		"scan": "pnpm build && node scripts/scan.mjs",
+		"format": "prettier --write credentials nodes test scripts package.json README.md VERIFICATION.md CHANGELOG.md THIRD_PARTY_NOTICES.md .github/workflows",
+		"format:check": "prettier --check credentials nodes test scripts package.json README.md VERIFICATION.md CHANGELOG.md THIRD_PARTY_NOTICES.md .github/workflows",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist",
+		"THIRD_PARTY_NOTICES.md",
+		"VERIFICATION.md",
+		"!dist/**/*.tsbuildinfo",
+		"!dist/package.json"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/KeeperSecretsManagerApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/KeeperSecretsManager/KeeperSecretsManager.node.js"
+		]
+	},
+	"devDependencies": {
+		"@keeper-security/secrets-manager-core": "17.0.0",
+		"@n8n/node-cli": "0.52.3",
+		"@n8n/scan-community-package": "0.39.0",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^21.1.0",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
 }
