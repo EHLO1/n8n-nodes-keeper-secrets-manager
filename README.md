@@ -109,7 +109,7 @@ n8n-nodes-keeper-secrets-manager@0.1.0-beta.1
 
 Accept the unverified community-node notice and install. The Docker host does not need to compile this package. Community-node installation and unverified packages must be enabled by the instance administrator. Ensure the n8n data directory uses persistent storage so the installed package survives container replacement; queue-mode workers must also have the package available.
 
-Use the exact beta version for repeatable tests. The `@beta` tag also works for the initial installation, but n8n resolves it once and does not continuously follow that tag. Updates to a specific later beta may require uninstalling and reinstalling the target version; back up test workflows first.
+Use the exact beta version for repeatable tests. The `@beta` tag also works for the initial installation, but n8n resolves it once and does not continuously follow that tag. n8n's update UI may compare against the stale `latest` tag (initially beta.1), making a newer beta appear to be ahead of the advertised latest release. The semantic version order is unchanged: beta.3 is newer than beta.2, which is newer than beta.1. Updates to a specific later beta may require uninstalling and reinstalling the target version; back up test workflows first.
 
 The first beta is intended for testing with a dedicated Keeper application and disposable records. It does not imply n8n verification or completion of live integration testing.
 

@@ -136,7 +136,9 @@ export class KeeperClient {
 		const response = json(
 			await this.query('get_secret', requestedRecords ? { requestedRecords } : {}),
 		);
-		if (response.encryptedAppKey !== undefined)
+		// Keeper may include encryptedAppKey:null (or an empty string) after binding.
+		// Match the SDK's nonempty-value check, not merely presence of the JSON field.
+		if (response.encryptedAppKey)
 			throw new KeeperProtocolError('Already-bound configuration required');
 		if (response.appData !== undefined && response.appData !== null)
 			json(decrypt(decodeBase64(response.appData), this.config.appKey, 'application data'));

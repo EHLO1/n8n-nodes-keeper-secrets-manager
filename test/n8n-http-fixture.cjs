@@ -69,6 +69,15 @@ async function main() {
 		assert.deepEqual(failures, []);
 		assert.deepEqual(result, { status: 'OK', message: 'Connected to Keeper Secrets Manager' });
 		const appData = await encryptedJson({ title: 'Empty app', type: 'app' }, appKey);
+		for (const encryptedAppKey of [null, '']) {
+			reply = { records: [raw], appData, encryptedAppKey };
+			assert.equal((await check()).status, 'OK');
+		}
+		reply = { records: [raw], appData, encryptedAppKey: 'nonempty-binding-envelope' };
+		assert.deepEqual(await check(), {
+			status: 'Error',
+			message: 'Already-bound configuration required',
+		});
 		for (const empty of [{ appData }, { appData, records: null, folders: null }]) {
 			reply = empty;
 			assert.equal((await check()).status, 'OK');

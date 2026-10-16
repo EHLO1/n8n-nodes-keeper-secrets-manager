@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.3
+
+- Match Keeper SDK handling of null/empty `encryptedAppKey` response fields. An already-bound configuration is no longer rejected just because that JSON field is present without a binding envelope.
+- Add regression cases through the actual n8n 2.10.3 credential-test HTTP helper, retaining rejection of a nonempty binding envelope.
+
 ## 0.1.0-beta.2
 
 - Accept authenticated Keeper application responses with no records or with null optional record/folder arrays.
