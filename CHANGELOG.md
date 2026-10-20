@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0
+
+First stable release, published under npm's latest tag after beta.6 user testing.
+
+- Fields as Array now returns separate `fields` and `custom` arrays using Keeper's classification. Both preserve labels, duplicate entries, and value arrays; null exclusion applies independently to each.
+- Flat output remains the default. Array-mode output intentionally changes from beta.6's combined fields array.
+
 ## 0.1.0-beta.6
 
 - Show default field items with friendly fixed titles and value inputs. Standard field types/labels are no longer editable; added fields retain their type/label controls.

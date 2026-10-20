@@ -164,17 +164,18 @@ export function formatRecord(
 	if (fieldsAsArray) {
 		for (const key of ['login', 'password', 'distinguishedName', 'description', 'id', 'domain'])
 			delete map[key];
-		map.fields = [...(data.fields ?? []), ...(data.custom ?? [])]
-			.filter(
-				(field) =>
-					!excludeNullValues ||
-					(field.value ?? []).some((value) => value !== null && value !== undefined),
-			)
-			.map((field) => ({
-				type: field.type,
-				...(field.label ? { label: field.label } : {}),
-				value: field.value ?? [],
-			}));
+		for (const source of ['fields', 'custom'] as const)
+			map[source] = (data[source] ?? [])
+				.filter(
+					(field) =>
+						!excludeNullValues ||
+						(field.value ?? []).some((value) => value !== null && value !== undefined),
+				)
+				.map((field) => ({
+					type: field.type,
+					...(field.label ? { label: field.label } : {}),
+					value: field.value ?? [],
+				}));
 		if (excludeNullValues)
 			for (const key of Object.keys(map)) if (map[key] === null) delete map[key];
 		return JSON.parse(JSON.stringify(map)) as IDataObject;

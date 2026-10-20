@@ -485,10 +485,8 @@ test('fields-array mode is evaluated per item and preserves pairing', async () =
 	assert.equal(items[0].json.login, 'user');
 	assert.equal(items[0].json.fields, undefined);
 	assert.equal(items[1].json.login, undefined);
-	assert.deepEqual(items[1].json.fields, [
-		{ type: 'login', value: ['user'] },
-		{ type: 'text', label: 'Extra', value: ['value'] },
-	]);
+	assert.deepEqual(items[1].json.fields, [{ type: 'login', value: ['user'] }]);
+	assert.deepEqual(items[1].json.custom, [{ type: 'text', label: 'Extra', value: ['value'] }]);
 	assert.equal(items[1].pairedItem.item, 1);
 });
 

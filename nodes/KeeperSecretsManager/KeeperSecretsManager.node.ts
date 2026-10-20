@@ -131,7 +131,7 @@ export class KeeperSecretsManager implements INodeType {
 				default: false,
 				displayOptions: { show: { operation: ['list', 'getAll', 'getByUid'] } },
 				description:
-					'Whether to group all standard and custom fields into one fields array with type, optional label, and value arrays. Record UID, title, revision, and folder details stay at the top level. Exclude Null Values also omits empty or all-null field values.',
+					'Whether to return separate fields and custom arrays, preserving Keeper’s standard/custom classification. Entries contain type, optional label, and value arrays. Record details stay at the top level. Exclude Null Values omits empty or all-null entries from both arrays.',
 			},
 			{
 				displayName: 'Record Data JSON',

@@ -211,7 +211,7 @@ test('null exclusion removes only top-level null keys and retains false, zero, e
 	assert.deepEqual(result.host, { hostName: null });
 });
 
-test('fields-array output separates metadata and combines field sources without losing duplicate labels or value arrays', () => {
+test('fields-array output preserves Keeper standard/custom classification and duplicate labels', () => {
 	const record = {
 		recordUid: 'a',
 		revision: 0,
@@ -242,19 +242,29 @@ test('fields-array output separates metadata and combines field sources without 
 		'folderUid',
 		'folderName',
 		'fields',
+		'custom',
 	]);
-	assert.equal(result.fields.length, 8);
-	assert.deepEqual(result.fields[3], {
+	assert.equal(result.fields.length, 3);
+	assert.equal(result.custom.length, 5);
+	assert.deepEqual(result.fields[2], { type: 'text', label: 'Duplicate', value: ['first'] });
+	assert.deepEqual(result.custom[0], {
 		type: 'text',
 		label: 'Duplicate',
 		value: ['second', 'third'],
 	});
 	assert.deepEqual(
 		formatRecord(record, true, true).fields.map((f) => f.value),
-		[['user'], ['first'], ['second', 'third'], [false], [0], ['']],
+		[['user'], ['first']],
+	);
+	assert.deepEqual(
+		formatRecord(record, true, true).custom.map((f) => f.value),
+		[['second', 'third'], [false], [0], ['']],
 	);
 	assert.equal(result.recordKey, undefined);
-	assert.equal(result.custom, undefined);
+	assert.deepEqual(
+		formatRecord({ ...record, data: { title: 'Empty', fields: [] } }, true, true).custom,
+		[],
+	);
 	assert.equal(
 		formatRecord({ ...record, data: { title: 'Empty', fields: [] } }, true, true).fields.length,
 		0,

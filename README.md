@@ -2,11 +2,11 @@
 
 Read and manage Keeper Secrets Manager records in n8n workflows.
 
-**Development status:** this package is not verified by n8n. It implements the Keeper protocol using Node.js cryptography and n8n HTTP helpers, with no external runtime dependencies. The official Keeper SDK is used only for development comparison tests. Credentials and both read operations have passed live testing on n8n 2.10.3. New folder metadata and create/update/delete still need live testing. See [VERIFICATION.md](VERIFICATION.md) for the remaining work.
+**Status:** stable release; not yet verified by n8n. It implements the Keeper protocol using Node.js cryptography and n8n HTTP helpers, with no external runtime dependencies. The official Keeper SDK is used only for development comparison tests. User testing has progressed through beta.6, including confirmed credentials and reads on n8n 2.10.3. See [VERIFICATION.md](VERIFICATION.md) for the remaining submission checks and validation limits.
 
 ## Installation
 
-For self-hosted n8n, follow the [community-node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) using the exact beta version below. Unverified packages cannot be installed on n8n Cloud through the verified-node catalog.
+For self-hosted n8n, follow the [community-node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/). In Settings → Community Nodes → Install, enter `n8n-nodes-keeper-secrets-manager@0.1.0` for the first stable release, or the package name alone to install npm's `latest` version. Existing beta installations can now update to the stable latest release. Unverified packages cannot be installed on n8n Cloud through the verified-node catalog.
 
 For local development, use Node.js 24 and pnpm 12.11.2:
 
@@ -48,7 +48,7 @@ Reads support exclusion by UID. Exclusion filters output after retrieval; it doe
 
 Enable **Exclude Null Values** to remove top-level keys whose value is null. This option defaults to off and retains `false`, `0`, empty strings, arrays, and nulls nested inside compound values.
 
-Enable **Fields as Array** to separate record details from its field values. The top level contains `recordUid`, `title`, `revision`, `folderUid`, and `folderName`; `fields` contains all standard and custom fields together as `{ "type": "login", "value": ["user"] }`, with an optional label. Values remain Keeper arrays, and duplicate labels are retained. With Exclude Null Values enabled, empty or all-null field entries are omitted; `false`, `0`, and empty text remain. Both toggles default to off, preserving the flat output.
+Enable **Fields as Array** to separate record details from its field values. The top level contains `recordUid`, `title`, `revision`, `folderUid`, and `folderName`. Standard fields appear in `fields`, and custom fields in `custom`, using Keeper's returned classification rather than inferring it from a local template. Both arrays contain entries such as `{ "type": "login", "value": ["user"] }`, with an optional label. Value arrays and duplicate labels are preserved. With Exclude Null Values enabled, empty or all-null entries are omitted from both arrays; `false`, `0`, and empty text remain. Both toggles default to off, preserving the flat output. This intentionally changes beta.6's combined fields array.
 
 ## Usage
 

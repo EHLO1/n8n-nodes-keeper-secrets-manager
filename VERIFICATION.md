@@ -15,7 +15,7 @@
 - Added the 18 documented default record templates, schema-based field/custom routing for structured and JSON writes, inferred Keeper value formats, and an optional read-output null filter. Tests exercise template changes through n8n's actual parameter resolver and ensure blank update placeholders retain existing values.
 - Refined defaults to match Keeper's UI Fields tables, with fixed standard item titles, native input removal, update-only clearing, and optional combined fields-array output. Local regression tests cover removal without schema-slot restoration and false/zero/empty-value preservation.
 
-Live beta.3 testing confirmed credential creation, Get All and Get by UID on n8n 2.10.3. The beta.5 schema-aware forms, normalization and null filtering still need live testing; live write-operation verification remains outstanding.
+Live beta.3 testing confirmed credential creation, Get All and Get by UID on n8n 2.10.3. The maintainer reports testing through beta.6 and approved the first stable release. The final standard/custom array separation is regression-tested locally. Detailed coverage of every write operation, restricted permissions and other submission scenarios has not been recorded; the checklist below remains relevant to n8n verification.
 
 Local checks are useful evidence, not n8n verification or proof of live Keeper interoperability.
 
