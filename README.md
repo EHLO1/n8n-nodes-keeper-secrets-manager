@@ -48,6 +48,8 @@ Reads support exclusion by UID. Exclusion filters output after retrieval; it doe
 
 Enable **Exclude Null Values** to remove top-level keys whose value is null. This option defaults to off and retains `false`, `0`, empty strings, arrays, and nulls nested inside compound values.
 
+Enable **Fields as Array** to separate record details from its field values. The top level contains `recordUid`, `title`, `revision`, `folderUid`, and `folderName`; `fields` contains all standard and custom fields together as `{ "type": "login", "value": ["user"] }`, with an optional label. Values remain Keeper arrays, and duplicate labels are retained. With Exclude Null Values enabled, empty or all-null field entries are omitted; `false`, `0`, and empty text remain. Both toggles default to off, preserving the flat output.
+
 ## Usage
 
 ### Read a record
@@ -64,7 +66,9 @@ Beta.4 intentionally removes the Raw Record Data output option. Existing read no
 
 Choose **Create a Record** and specify the root shared folder UID. This is required: Keeper wraps the new record key using that shared folder's key. **Structured Fields** is the default. Title is the record name displayed in Keeper, separate from its login. Choose a Record Type to populate its default fields, fill the values you need, and optionally enter record-level Notes.
 
-There is one **Fields** section. Standard types and labels fill the selected template's standard slots; extra types, labels, and occurrences become optional custom fields automatically. The templates cover the 18 types in [Keeper's default record type reference](https://docs.keeper.io/keeperpam/secrets-manager/about/field-record-types#default-record-types), with additional current SDK defaults such as login passkeys and one-time codes. File/photo templates only reference existing attachments; uploading attachments is outside scope. Custom tenant schemas can be named explicitly; because the node cannot discover those schemas, use Raw JSON when you need control over their standard/custom arrays.
+There is one **Fields** section. Default items follow the UI Fields tables in [Keeper's default record type reference](https://docs.keeper.io/keeperpam/secrets-manager/about/field-record-types#default-record-types). Login starts with Login, Password, and Website Address. Standard items have fixed friendly titles and a Value input; their Keeper types and labels are supplied automatically. Use n8n's native Delete Item control to omit an item from creation. Removed inputs are not restored as empty schema slots. Other API-supported fields, such as login passkeys and one-time codes, remain available through Add Field without appearing by default.
+
+Choose **Additional Field** to enter a type, optional label, and value. Extra types, labels, and occurrences become optional custom fields automatically. File/photo templates only reference existing attachments; uploading attachments is outside scope. Custom tenant schemas can be named explicitly; because the node cannot discover those schemas, use Raw JSON when you need control over their standard/custom arrays.
 
 The value format follows the Keeper field type. Text fields preserve strings such as `001234` and `false` exactly. Date fields accept integer epoch milliseconds; checkbox fields accept `true` or `false`. Compound fields accept a JSON object or an array of objects, for example a host: `{"hostName":"db.example.com","port":"5432"}`. Reference fields such as `fileRef` accept a JSON array of existing UIDs. Blank template values produce empty value arrays on creation. There is no Data Type selector.
 
@@ -85,7 +89,7 @@ Alternatively, choose **Raw JSON** and provide Record Data JSON:
 
 Choose **Update a Record** and specify its UID. **Keep Existing Type** is the default; it uses the retrieved record's type when classifying supplied fields. Selecting a specific type displays its default fields and explicitly applies that type to the record. Enter a Title to rename the record and Notes to replace record-level notes; leave either blank to preserve it. **Clear Notes** explicitly removes notes.
 
-Fill only the field values to change. Blank template placeholders are ignored. **Clear Value** (or an empty JSON value array for compound/reference fields) explicitly empties a matching field. Existing fields match by Keeper type and label; other field values and metadata are retained. Extra fields are added to custom. Ambiguous duplicate matches are rejected. Selecting another template displays that template's own fields, so values entered for a different template are not submitted accidentally.
+Fill only the field values to change. Blank template placeholders are ignored. Native Delete Item removes an input, leaving its stored Keeper value unchanged. **Clear Value** is available only for updates and explicitly empties the matching stored value. An empty JSON value array also clears compound/reference values. Existing fields match by Keeper type and label; other field values and metadata are retained. Extra fields are added to custom. Ambiguous duplicate matches are rejected. Selecting another template displays that template's own fields, so values entered for a different template are not submitted accidentally.
 
 Alternatively, choose **Raw JSON** and provide Update Data JSON:
 
@@ -96,6 +100,8 @@ Alternatively, choose **Raw JSON** and provide Update Data JSON:
 For Raw JSON, omitted properties remain unchanged. Supplied `fields` or `custom` arrays replace that array's contents. For a known default record type, missing standard slots are filled with empty value arrays, and fields that do not match the schema are moved into custom without dropping existing custom fields when custom is omitted. An empty fields array clears all standard values. If type is omitted on update, the existing record type is used. Tenant-defined schemas are left in their supplied arrays. Empty patches and unsupported top-level properties are rejected. Examples in the JSON editor are formatted across multiple lines.
 
 Saved beta.4 input containers remain supported for execution but are hidden in the new editor. Reconfigure existing write nodes using the new Fields section before editing their values; do not mix old saved fields with new rows targeting the same field.
+
+Saved beta.5 generic rows remain visible as Additional Field items to preserve their entered values. Create a fresh write node to see the new default items, or remove the old generic rows and add the corresponding friendly items through Add Field. Do not submit both forms of the same standard field.
 
 ### Handle failures
 
@@ -122,7 +128,7 @@ Commit and push the release changes, then push the matching tag `0.1.0-beta.1`. 
 Once the workflow succeeds, a self-hosted n8n Owner/Admin can open **Settings → Community Nodes → Install** and enter:
 
 ```text
-n8n-nodes-keeper-secrets-manager@0.1.0-beta.5
+n8n-nodes-keeper-secrets-manager@0.1.0-beta.6
 ```
 
 Accept the unverified community-node notice and install. The Docker host does not need to compile this package. Community-node installation and unverified packages must be enabled by the instance administrator. Ensure the n8n data directory uses persistent storage so the installed package survives container replacement; queue-mode workers must also have the package available.

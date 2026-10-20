@@ -13,6 +13,8 @@ Secrets Manager SDK:
 
 Upstream license: https://github.com/Keeper-Security/secrets-manager/blob/master/LICENSE
 
+`RecordFieldUi.ts` maps the documented UI field names and default items from https://docs.keeper.io/keeperpam/secrets-manager/about/field-record-types. These UI defaults are separate from SDK-supported wire schemas: fields omitted from the record-type tables are available to add but are not selected by default.
+
 MIT License
 
 Copyright (c) 2021 Keeper Security

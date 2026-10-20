@@ -159,7 +159,7 @@ export function partitionFields(
 	return { fields, custom: remaining };
 }
 
-export function normalizeRecord(data: RecordData): RecordData {
-	const { fields, custom } = partitionFields(data.type, data.fields, true);
+export function normalizeRecord(data: RecordData, complete = true): RecordData {
+	const { fields, custom } = partitionFields(data.type, data.fields, complete);
 	return { ...data, fields, custom: [...(data.custom ?? []), ...custom] };
 }

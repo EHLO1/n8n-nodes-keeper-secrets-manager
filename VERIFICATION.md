@@ -13,6 +13,7 @@
 - Updated frozen-lockfile pnpm CI and published beta releases through GitHub Actions with provenance support.
 - Added flat custom-field output, direct-folder metadata, structured write inputs and SDK comparison tests for nested folder encryption.
 - Added the 18 documented default record templates, schema-based field/custom routing for structured and JSON writes, inferred Keeper value formats, and an optional read-output null filter. Tests exercise template changes through n8n's actual parameter resolver and ensure blank update placeholders retain existing values.
+- Refined defaults to match Keeper's UI Fields tables, with fixed standard item titles, native input removal, update-only clearing, and optional combined fields-array output. Local regression tests cover removal without schema-slot restoration and false/zero/empty-value preservation.
 
 Live beta.3 testing confirmed credential creation, Get All and Get by UID on n8n 2.10.3. The beta.5 schema-aware forms, normalization and null filtering still need live testing; live write-operation verification remains outstanding.
 

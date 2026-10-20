@@ -440,6 +440,58 @@ test('null exclusion is evaluated per input item during reads', async () => {
 	assert.equal(items[1].json.checkbox, false);
 });
 
+test('native field removal omits create inputs without restoring schema slots; standard titles cannot change wire labels', async () => {
+	let created;
+	KeeperClient.prototype.createSecret = async (_folder, data) => {
+		created = data;
+		return 'new';
+	};
+	await execute({
+		operation: 'create',
+		folderUid: 'folder',
+		title: 'Test',
+		recordType: 'login',
+		fieldsLogin: {
+			standardLogin: [{ textValue: 'user', label: 'Ignored user label', type: 'password' }],
+			standardUrl: [{ textValue: '' }],
+			field: [{ type: 'text', label: 'Environment', textValue: 'prod' }],
+		},
+	});
+	assert.deepEqual(created.fields, [
+		{ type: 'login', value: ['user'] },
+		{ type: 'url', value: [] },
+	]);
+	assert.deepEqual(created.custom, [{ type: 'text', label: 'Environment', value: ['prod'] }]);
+});
+
+test('fields-array mode is evaluated per item and preserves pairing', async () => {
+	KeeperClient.prototype.getSecrets = async () => ({
+		records: [
+			{
+				recordUid: 'a',
+				revision: 1,
+				data: {
+					title: 'Test',
+					fields: [{ type: 'login', value: ['user'] }],
+					custom: [{ type: 'text', label: 'Extra', value: ['value'] }],
+				},
+			},
+		],
+	});
+	const [items] = await execute(
+		{ operation: 'list', excludeUids: '', fieldsAsArray: (i) => i === 1 },
+		2,
+	);
+	assert.equal(items[0].json.login, 'user');
+	assert.equal(items[0].json.fields, undefined);
+	assert.equal(items[1].json.login, undefined);
+	assert.deepEqual(items[1].json.fields, [
+		{ type: 'login', value: ['user'] },
+		{ type: 'text', label: 'Extra', value: ['value'] },
+	]);
+	assert.equal(items[1].pairedItem.item, 1);
+});
+
 test('deletion requires confirmation and partial failures stop by default', async () => {
 	let called = false;
 	KeeperClient.prototype.deleteSecret = async () => {

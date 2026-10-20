@@ -8,7 +8,9 @@ import {
 	booleanFieldTypes,
 	numericFieldTypes,
 	objectFieldTypes,
+	recordSchemas,
 } from './RecordSchemas';
+import { fieldOptionName } from './RecordFieldUi';
 export { KeeperValidationError } from './KeeperCrypto';
 
 export function parseObject(value: unknown): Record<string, unknown> {
@@ -136,7 +138,11 @@ export function createData(value: unknown): RecordData {
 	return validateData(value) as unknown as RecordData;
 }
 
-export function formatRecord(record: KeeperRecord, excludeNullValues = false): IDataObject {
+export function formatRecord(
+	record: KeeperRecord,
+	excludeNullValues = false,
+	fieldsAsArray = false,
+): IDataObject {
 	const data = record.data as unknown as {
 		title: string;
 		fields?: { label?: string; type: string; value?: unknown[] }[];
@@ -155,6 +161,24 @@ export function formatRecord(record: KeeperRecord, excludeNullValues = false): I
 		id: null,
 		domain: null,
 	});
+	if (fieldsAsArray) {
+		for (const key of ['login', 'password', 'distinguishedName', 'description', 'id', 'domain'])
+			delete map[key];
+		map.fields = [...(data.fields ?? []), ...(data.custom ?? [])]
+			.filter(
+				(field) =>
+					!excludeNullValues ||
+					(field.value ?? []).some((value) => value !== null && value !== undefined),
+			)
+			.map((field) => ({
+				type: field.type,
+				...(field.label ? { label: field.label } : {}),
+				value: field.value ?? [],
+			}));
+		if (excludeNullValues)
+			for (const key of Object.keys(map)) if (map[key] === null) delete map[key];
+		return JSON.parse(JSON.stringify(map)) as IDataObject;
+	}
 	const used = new Set([
 		'recordUid',
 		'title',
@@ -274,6 +298,44 @@ export function structuredFields(value: unknown): IDataObject[] {
 		}
 		return [{ type, ...(label ? { label } : {}), value: values } as IDataObject];
 	});
+}
+
+export function templateFields(value: unknown, type: string, creating = false): IDataObject[] {
+	const input = parseObject(value ?? {});
+	const fields: IDataObject[] = [];
+	const schema = Object.prototype.hasOwnProperty.call(recordSchemas, type)
+		? recordSchemas[type]
+		: [];
+	for (const slot of schema) {
+		const rows = input[fieldOptionName(slot)];
+		if (rows === undefined) continue; // Native Delete Item removes the option.
+		if (!Array.isArray(rows) || rows.length > 1)
+			throw new KeeperValidationError(
+				'Include each standard field once; use a labelled additional field for another value',
+			);
+		for (const raw of rows) {
+			const row = parseObject(raw);
+			const supplied = structuredFields({
+				field: [
+					{
+						...slot,
+						textValue: row.textValue,
+						jsonValue: row.jsonValue,
+						clearValue: !creating && row.clearValue === true,
+					},
+				],
+			});
+			if (supplied.length) fields.push(...supplied);
+			else if (creating) fields.push({ ...slot, value: [] });
+		}
+	}
+	// Retain saved beta.5 rows and the editable Additional Field option.
+	const added = input.field ?? [];
+	const rows =
+		creating && Array.isArray(added)
+			? added.map((row) => ({ ...parseObject(row), clearValue: false }))
+			: added;
+	return [...fields, ...structuredFields({ field: rows })];
 }
 
 export function mergeFields(existing: IDataObject[], supplied: IDataObject[]): IDataObject[] {

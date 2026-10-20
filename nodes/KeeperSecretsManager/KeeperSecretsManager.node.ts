@@ -25,6 +25,7 @@ import {
 	formatRecord,
 	KeeperValidationError,
 	structuredFields,
+	templateFields,
 	mergeFields,
 } from './GenericFunctions';
 
@@ -122,6 +123,15 @@ export class KeeperSecretsManager implements INodeType {
 				displayOptions: { show: { operation: ['list', 'getAll', 'getByUid'] } },
 				description:
 					'Whether to omit top-level output keys whose value is null. Empty strings, false, zero, and arrays are retained.',
+			},
+			{
+				displayName: 'Fields as Array',
+				name: 'fieldsAsArray',
+				type: 'boolean',
+				default: false,
+				displayOptions: { show: { operation: ['list', 'getAll', 'getByUid'] } },
+				description:
+					'Whether to group all standard and custom fields into one fields array with type, optional label, and value arrays. Record UID, title, revision, and folder details stay at the top level. Exclude Null Values also omits empty or all-null field values.',
 			},
 			{
 				displayName: 'Record Data JSON',
@@ -245,8 +255,10 @@ export class KeeperSecretsManager implements INodeType {
 						(this.getNodeParameter('excludeUids', i) as string).split(/[\s,]+/).filter(Boolean),
 					);
 					const excludeNullValues = this.getNodeParameter('excludeNullValues', i, false) as boolean;
+					const fieldsAsArray = this.getNodeParameter('fieldsAsArray', i, false) as boolean;
 					for (const record of records)
-						if (!excluded.has(record.recordUid)) emit(formatRecord(record, excludeNullValues));
+						if (!excluded.has(record.recordUid))
+							emit(formatRecord(record, excludeNullValues, fieldsAsArray));
 				} else if (operation === 'create') {
 					const folder = (this.getNodeParameter('folderUid', i) as string).trim();
 					if (!folder)
@@ -275,8 +287,10 @@ export class KeeperSecretsManager implements INodeType {
 										title: this.getNodeParameter('title', i),
 										type,
 										fields: [
-											...structuredFields(
+											...templateFields(
 												this.getNodeParameter(fieldParameterName(selection), i, {}),
+												selection,
+												true,
 											),
 											...structuredFields(this.getNodeParameter('recordFields', i, {})),
 										],
@@ -284,6 +298,7 @@ export class KeeperSecretsManager implements INodeType {
 									}
 								: this.getNodeParameter('recordData', i),
 						),
+						!structured,
 					);
 					const recordUid = await client.createSecret(folder, data);
 					emit({ recordUid, operation, success: true });
@@ -318,7 +333,10 @@ export class KeeperSecretsManager implements INodeType {
 						if (notes !== '' || this.getNodeParameter('clearNotes', i, false))
 							patch.notes = this.getNodeParameter('clearNotes', i, false) ? '' : notes;
 						suppliedFields = [
-							...structuredFields(this.getNodeParameter(fieldParameterName(selection), i, {})),
+							...templateFields(
+								this.getNodeParameter(fieldParameterName(selection), i, {}),
+								selection,
+							),
 							...structuredFields(this.getNodeParameter('recordFields', i, {})),
 						];
 						if (suppliedFields.length) patch.fields = suppliedFields;
@@ -340,7 +358,7 @@ export class KeeperSecretsManager implements INodeType {
 						);
 					if (structured) {
 						if (suppliedFields.length) {
-							record.data = normalizeRecord(record.data);
+							record.data = normalizeRecord(record.data, false);
 							const classified = partitionFields(
 								(patch.type ?? record.data.type) as string,
 								suppliedFields,
@@ -357,7 +375,8 @@ export class KeeperSecretsManager implements INodeType {
 								);
 					}
 					record.data = { ...record.data, ...patch } as typeof record.data;
-					if ('fields' in patch || 'type' in patch) record.data = normalizeRecord(record.data);
+					if ('fields' in patch || 'type' in patch)
+						record.data = normalizeRecord(record.data, !structured);
 					await client.updateSecret(record);
 					emit({ recordUid: uid, operation, success: true });
 				} else if (operation === 'delete') {

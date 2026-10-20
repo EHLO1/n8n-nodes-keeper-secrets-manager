@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.6
+
+- Show default field items with friendly fixed titles and value inputs. Standard field types/labels are no longer editable; added fields retain their type/label controls.
+- Populate only the fields listed in Keeper's default-record tables. Extra SDK-supported fields remain available through Add Field instead of appearing by default.
+- Support n8n's native Delete Item control. Removed structured-create inputs are not restored as empty schema slots. On update, omitted inputs preserve stored values.
+- Keep Clear Value exclusively for updates; creation ignores saved clear flags.
+- Add Fields as Array to read operations. Standard and custom fields share a single array, while record metadata stays at the top level. Null exclusion also omits empty/all-null array entries while retaining false, zero, and empty strings.
+- Preserve saved beta.5 generic input rows as Additional Field items.
+
 ## 0.1.0-beta.5
 
 - Add Keeper's 18 documented default record templates, including standard field labels and the current SDK's additional default fields. Selecting a record type populates its Fields section.

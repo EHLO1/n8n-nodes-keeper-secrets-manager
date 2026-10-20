@@ -1,4 +1,5 @@
 import type { INodeProperties } from 'n8n-workflow';
+import { documentedFields, fieldOptionName, fieldUiNames } from './RecordFieldUi';
 import {
 	arrayFieldTypes,
 	booleanFieldTypes,
@@ -17,43 +18,74 @@ const typeOptions = Object.entries(recordTypeNames)
 	.map(([value, name]) => ({ name, value }))
 	.sort((a, b) => a.name.localeCompare(b.name));
 
+const clearValue: INodeProperties = {
+	displayName: 'Clear Value',
+	name: 'clearValue',
+	type: 'boolean',
+	default: false,
+	displayOptions: { show: { '/operation': ['update'] } },
+	description:
+		'Whether to empty the stored Keeper value. Removing an input item only leaves that stored value unchanged.',
+};
+
 function fields(type: string): INodeProperties {
+	const defaults = documentedFields[type] ?? [];
+	const standardOptions = (recordSchemas[type] ?? []).map((slot) => {
+		const friendly =
+			defaults.find((entry) => entry.type === slot.type)?.displayName ??
+			fieldUiNames[slot.type] ??
+			slot.label ??
+			slot.type;
+		const complex = jsonTypes.includes(slot.type);
+		return {
+			name: fieldOptionName(slot),
+			displayName: friendly,
+			values: [
+				clearValue,
+				{
+					displayName: 'Value',
+					name: complex ? 'jsonValue' : 'textValue',
+					type: complex ? 'json' : 'string',
+					default: '',
+					displayOptions: { hide: { clearValue: [true] } },
+					description: complex
+						? 'Keeper object or value array. For a host: {"hostName":"db.example.com","port":"5432"}. Blank leaves an existing value unchanged.'
+						: 'The value stored in this Keeper field. Blank leaves an existing value unchanged on update.',
+				} as INodeProperties,
+			],
+		};
+	});
 	return {
 		displayName: 'Fields',
 		name: fieldParameterName(type),
 		type: 'fixedCollection',
 		default: {
-			field: (recordSchemas[type] ?? []).map((slot) => ({
-				...slot,
-				textValue: '',
-				jsonValue: '',
-				clearValue: false,
-			})),
+			...Object.fromEntries(
+				defaults.map((slot) => [
+					fieldOptionName(slot),
+					[{ [jsonTypes.includes(slot.type) ? 'jsonValue' : 'textValue']: '' }],
+				]),
+			),
 		},
 		placeholder: 'Add Field',
 		typeOptions: { multipleValues: true },
 		displayOptions: { show: { ...structured, recordType: [type] } },
 		description:
-			'Default fields belong to the selected record type. Additional types or labels are saved as optional custom fields. Blank values are empty on create and unchanged on update; Clear Value explicitly clears an existing value.',
+			'Default items follow Keeper’s documented fields. Use the native Delete Item control to omit an input. On update, omitted or blank items leave stored values unchanged; Clear Value empties a stored value. Extra types and labels are saved as custom automatically.',
 		options: [
+			...standardOptions,
 			{
 				name: 'field',
-				displayName: 'Field',
+				displayName: 'Additional Field',
 				values: [
-					{
-						displayName: 'Clear Value',
-						name: 'clearValue',
-						type: 'boolean',
-						default: false,
-						description: 'Whether to clear this field instead of supplying a value',
-					},
+					clearValue,
 					{
 						displayName: 'Label',
 						name: 'label',
 						type: 'string',
 						default: '',
 						description:
-							'Use the default label for a standard field; a different label adds a custom field',
+							'Optional label for an added field; standard field titles are fixed by the selected record type',
 					},
 					{
 						displayName: 'Type',
@@ -69,7 +101,7 @@ function fields(type: string): INodeProperties {
 						name: 'textValue',
 						type: 'string',
 						default: '',
-						displayOptions: { hide: { type: jsonTypes }, show: { clearValue: [false] } },
+						displayOptions: { hide: { type: jsonTypes, clearValue: [true] } },
 						description: `Text is preserved exactly. For ${numericFieldTypes.join(', ')} use epoch milliseconds; for ${booleanFieldTypes.join(', ')} use true or false. Blank leaves an existing value unchanged.`,
 					},
 					{
@@ -77,7 +109,7 @@ function fields(type: string): INodeProperties {
 						name: 'jsonValue',
 						type: 'json',
 						default: '',
-						displayOptions: { show: { type: jsonTypes, clearValue: [false] } },
+						displayOptions: { show: { type: jsonTypes }, hide: { clearValue: [true] } },
 						description:
 							'A Keeper object or value array. Host example: {"hostName":"db.example.com","port":"5432"}. Reference fields accept arrays of record UIDs. Blank leaves the value unchanged.',
 					},

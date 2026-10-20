@@ -8,9 +8,11 @@ const {
 } = require('../dist/nodes/KeeperSecretsManager/RecordSchemas');
 const {
 	structuredFields,
+	templateFields,
 	formatRecord,
 } = require('../dist/nodes/KeeperSecretsManager/GenericFunctions');
 const { recordProperties } = require('../dist/nodes/KeeperSecretsManager/RecordProperties');
+const { documentedFields } = require('../dist/nodes/KeeperSecretsManager/RecordFieldUi');
 const { NodeHelpers } = require('n8n-workflow');
 const {
 	KeeperSecretsManager,
@@ -29,13 +31,25 @@ test('n8n resolves the selected template defaults and keeps update titles option
 		);
 	const login = resolve({ operation: 'create' });
 	assert.equal(login.recordType, 'login');
-	assert.ok(login.fieldsLogin.field.some((f) => f.type === 'password'));
+	assert.deepEqual(Object.keys(login.fieldsLogin), [
+		'standardLogin',
+		'standardPassword',
+		'standardUrl',
+	]);
 	assert.equal(login.fieldsServerCredentials, undefined);
+	assert.deepEqual(Object.keys(login.fieldsLogin.standardLogin[0]), ['textValue']);
 	const server = resolve({ ...login, recordType: 'serverCredentials' });
 	assert.equal(server.fieldsLogin, undefined);
-	assert.ok(server.fieldsServerCredentials.field.some((f) => f.type === 'host'));
+	assert.ok(server.fieldsServerCredentials.standardHost);
+	const removed = resolve({ ...login, fieldsLogin: { standardLogin: [{ textValue: 'user' }] } });
+	assert.deepEqual(Object.keys(removed.fieldsLogin), ['standardLogin']);
+	assert.deepEqual(templateFields(removed.fieldsLogin, 'login', true), [
+		{ type: 'login', value: ['user'] },
+	]);
 	const update = resolve({ operation: 'update' });
 	assert.equal(update.recordType, 'existing');
+	const updateLogin = resolve({ operation: 'update', recordType: 'login' });
+	assert.equal(updateLogin.fieldsLogin.standardLogin[0].clearValue, false);
 	const issues = NodeHelpers.getNodeParametersIssues(
 		description.properties,
 		{
@@ -60,13 +74,45 @@ test('every built-in template supplies empty standard fields and keeps explicit 
 		);
 		assert.deepEqual(result.custom, custom);
 		const property = recordProperties.find((p) => p.name === fieldParameterName(type));
-		assert.equal(property.default.field.length, slots.length);
-		assert.deepEqual(structuredFields(property.default), []);
-		assert.equal(
-			property.options[0].values.some((p) => p.name === 'valueType'),
-			false,
+		assert.equal(Object.keys(property.default).length, documentedFields[type].length);
+		assert.deepEqual(
+			templateFields(property.default, type, true),
+			documentedFields[type].map(({ type, label }) => ({
+				type,
+				...(label ? { label } : {}),
+				value: [],
+			})),
 		);
+		assert.deepEqual(templateFields(property.default, type), []);
+		for (const option of property.options) {
+			assert.equal(
+				option.values.some((p) => p.name === 'valueType'),
+				false,
+			);
+			assert.deepEqual(option.values.find((p) => p.name === 'clearValue').displayOptions.show, {
+				'/operation': ['update'],
+			});
+			if (option.name !== 'field')
+				assert.ok(
+					option.values.every((p) => ['textValue', 'jsonValue', 'clearValue'].includes(p.name)),
+				);
+		}
 	}
+});
+
+test('Clear Value empties an update value but is ignored when creating a record', () => {
+	const input = {
+		standardLogin: [{ textValue: 'user', clearValue: true }],
+		field: [{ type: 'text', label: 'Extra', textValue: 'keep', clearValue: true }],
+	};
+	assert.deepEqual(templateFields(input, 'login'), [
+		{ type: 'login', value: [] },
+		{ type: 'text', label: 'Extra', value: [] },
+	]);
+	assert.deepEqual(templateFields(input, 'login', true), [
+		{ type: 'login', value: ['user'] },
+		{ type: 'text', label: 'Extra', value: ['keep'] },
+	]);
 });
 
 test('normalization rehomes unknown types, extra occurrences and labels without losing values or mutating input', () => {
@@ -163,4 +209,54 @@ test('null exclusion removes only top-level null keys and retains false, zero, e
 	assert.equal(result.empty, '');
 	assert.equal(result.title, '');
 	assert.deepEqual(result.host, { hostName: null });
+});
+
+test('fields-array output separates metadata and combines field sources without losing duplicate labels or value arrays', () => {
+	const record = {
+		recordUid: 'a',
+		revision: 0,
+		folderUid: 'f',
+		folderName: 'n8n',
+		recordKey: 'never-output',
+		data: {
+			title: 'Test',
+			fields: [
+				{ type: 'login', value: ['user'] },
+				{ type: 'password', value: [] },
+				{ type: 'text', label: 'Duplicate', value: ['first'] },
+			],
+			custom: [
+				{ type: 'text', label: 'Duplicate', value: ['second', 'third'] },
+				{ type: 'checkbox', value: [false] },
+				{ type: 'text', value: [null] },
+				{ type: 'text', label: 'Zero', value: [0] },
+				{ type: 'text', label: 'Empty', value: [''] },
+			],
+		},
+	};
+	const result = formatRecord(record, false, true);
+	assert.deepEqual(Object.keys(result), [
+		'recordUid',
+		'title',
+		'revision',
+		'folderUid',
+		'folderName',
+		'fields',
+	]);
+	assert.equal(result.fields.length, 8);
+	assert.deepEqual(result.fields[3], {
+		type: 'text',
+		label: 'Duplicate',
+		value: ['second', 'third'],
+	});
+	assert.deepEqual(
+		formatRecord(record, true, true).fields.map((f) => f.value),
+		[['user'], ['first'], ['second', 'third'], [false], [0], ['']],
+	);
+	assert.equal(result.recordKey, undefined);
+	assert.equal(result.custom, undefined);
+	assert.equal(
+		formatRecord({ ...record, data: { title: 'Empty', fields: [] } }, true, true).fields.length,
+		0,
+	);
 });
