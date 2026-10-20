@@ -176,7 +176,10 @@ test('update preserves omitted properties, replaces arrays, and retains revision
 		recordUid: 'a',
 		updateData: { title: 'New', fields: [] },
 	});
-	assert.deepEqual(updated.data, { type: 'login', title: 'New', notes: 'Keep', fields: [] });
+	assert.equal(updated.data.type, 'login');
+	assert.equal(updated.data.title, 'New');
+	assert.equal(updated.data.notes, 'Keep');
+	assert.ok(updated.data.fields.every((field) => field.value.length === 0));
 	assert.equal(updated.revision, 5);
 });
 
@@ -229,7 +232,9 @@ test('structured create evaluates input values and preserves Keeper value types'
 	);
 	assert.equal(created[1].data.title, 'Account 1');
 	assert.deepEqual(
-		created[1].data.fields.map((f) => f.value),
+		[...created[1].data.fields, ...created[1].data.custom]
+			.filter((f) => f.value.length)
+			.map((f) => f.value),
 		[['user1'], [false], [0], [{ hostName: 'db.example.com', port: '5432' }]],
 	);
 	assert.deepEqual(created[1].data.custom[0].value, []);
@@ -268,10 +273,14 @@ test('structured update merges exact type/label matches and preserves untouched 
 	assert.equal(updated.revision, 9);
 	assert.equal(updated.data.title, 'Production');
 	assert.equal(updated.data.notes, '');
-	assert.deepEqual(updated.data.fields, [
+	assert.deepEqual(
+		updated.data.fields.find((field) => field.type === 'password'),
 		{ type: 'password', value: ['new'], required: true },
+	);
+	assert.deepEqual(
+		updated.data.custom.find((field) => field.label === 'Other'),
 		{ type: 'text', label: 'Other', value: ['keep'] },
-	]);
+	);
 	assert.deepEqual(updated.data.custom[0].value, ['production']);
 });
 
@@ -302,6 +311,133 @@ test('invalid or ambiguous structured inputs are rejected without exposing value
 		/Multiple existing/,
 	);
 	await assert.rejects(execute({ operation: 'update', recordUid: 'a' }), /at least one property/);
+});
+
+test('raw create and update normalize supplied fields against the effective record type', async () => {
+	let created;
+	KeeperClient.prototype.createSecret = async (_folder, data) => {
+		created = data;
+		return 'new';
+	};
+	await execute({
+		operation: 'create',
+		inputMode: 'json',
+		folderUid: 'folder',
+		recordData: {
+			title: 'Server',
+			type: 'serverCredentials',
+			fields: [
+				{ type: 'host', value: [{ hostName: 'db' }] },
+				{ type: 'text', label: 'Environment', value: ['prod'] },
+			],
+		},
+	});
+	assert.deepEqual(created.fields.find((f) => f.type === 'host').value, [{ hostName: 'db' }]);
+	assert.equal(created.custom[0].label, 'Environment');
+	KeeperClient.prototype.getSecrets = async () => ({
+		records: [
+			{
+				recordUid: 'a',
+				revision: 3,
+				data: {
+					type: 'serverCredentials',
+					title: 'Old',
+					fields: [{ type: 'login', value: ['old'] }],
+					custom: [{ type: 'text', label: 'Keep', value: ['keep'] }],
+				},
+			},
+		],
+	});
+	let updated;
+	KeeperClient.prototype.updateSecret = async (record) => {
+		updated = record;
+	};
+	await execute({
+		operation: 'update',
+		inputMode: 'json',
+		recordUid: 'a',
+		updateData: {
+			fields: [
+				{ type: 'host', value: [{ hostName: 'new-db' }] },
+				{ type: 'text', label: 'Environment', value: ['prod'] },
+			],
+		},
+	});
+	assert.equal(updated.data.type, 'serverCredentials');
+	assert.equal(updated.data.title, 'Old');
+	assert.deepEqual(updated.data.fields.find((f) => f.type === 'login').value, []);
+	assert.deepEqual(
+		updated.data.custom.map((f) => f.label),
+		['Keep', 'Environment'],
+	);
+});
+
+test('new structured form preserves blank placeholders, edits custom fields once, and explicitly clears values and notes', async () => {
+	KeeperClient.prototype.getSecrets = async () => ({
+		records: [
+			{
+				recordUid: 'a',
+				revision: 4,
+				data: {
+					type: 'serverCredentials',
+					title: 'Old',
+					notes: 'Remove',
+					fields: [
+						{ type: 'host', value: [{ hostName: 'keep-db' }] },
+						{ type: 'login', value: ['keep-user'] },
+						{ type: 'password', value: ['old'] },
+						{ type: 'text', label: 'Environment', value: ['old-env'] },
+					],
+				},
+			},
+		],
+	});
+	let updated;
+	KeeperClient.prototype.updateSecret = async (record) => {
+		updated = record;
+	};
+	await execute({
+		operation: 'update',
+		recordUid: 'a',
+		title: 'Renamed',
+		clearNotes: true,
+		fieldsExisting: {
+			field: [
+				{ type: 'host', jsonValue: '' },
+				{ type: 'login', textValue: '' },
+				{ type: 'password', clearValue: true },
+				{ type: 'text', label: 'Environment', textValue: 'prod' },
+			],
+		},
+	});
+	assert.equal(updated.data.type, 'serverCredentials');
+	assert.equal(updated.data.title, 'Renamed');
+	assert.equal(updated.data.notes, '');
+	assert.deepEqual(updated.data.fields.find((f) => f.type === 'host').value, [
+		{ hostName: 'keep-db' },
+	]);
+	assert.deepEqual(updated.data.fields.find((f) => f.type === 'login').value, ['keep-user']);
+	assert.deepEqual(updated.data.fields.find((f) => f.type === 'password').value, []);
+	assert.deepEqual(updated.data.custom, [{ type: 'text', label: 'Environment', value: ['prod'] }]);
+});
+
+test('null exclusion is evaluated per input item during reads', async () => {
+	KeeperClient.prototype.getSecrets = async () => ({
+		records: [
+			{
+				recordUid: 'a',
+				revision: 0,
+				data: { title: 'Test', fields: [{ type: 'checkbox', value: [false] }] },
+			},
+		],
+	});
+	const [items] = await execute(
+		{ operation: 'list', excludeUids: '', excludeNullValues: (i) => i === 1 },
+		2,
+	);
+	assert.equal(items[0].json.password, null);
+	assert.equal('password' in items[1].json, false);
+	assert.equal(items[1].json.checkbox, false);
 });
 
 test('deletion requires confirmation and partial failures stop by default', async () => {

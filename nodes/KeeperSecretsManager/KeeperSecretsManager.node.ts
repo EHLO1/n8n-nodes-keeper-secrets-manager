@@ -9,6 +9,12 @@ import type {
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 import { KeeperClient } from './KeeperClient';
 import { recordProperties } from './RecordProperties';
+import {
+	fieldParameterName,
+	normalizeRecord,
+	partitionFields,
+	recordSchemas,
+} from './RecordSchemas';
 import { credentialTransport, executionTransport } from './KeeperTransport';
 import { keeperFailureMessage } from './KeeperCrypto';
 import {
@@ -109,6 +115,15 @@ export class KeeperSecretsManager implements INodeType {
 			},
 			...recordProperties,
 			{
+				displayName: 'Exclude Null Values',
+				name: 'excludeNullValues',
+				type: 'boolean',
+				default: false,
+				displayOptions: { show: { operation: ['list', 'getAll', 'getByUid'] } },
+				description:
+					'Whether to omit top-level output keys whose value is null. Empty strings, false, zero, and arrays are retained.',
+			},
+			{
 				displayName: 'Record Data JSON',
 				name: 'recordData',
 				type: 'json',
@@ -138,7 +153,18 @@ export class KeeperSecretsManager implements INodeType {
 				displayName: 'Update Data JSON',
 				name: 'updateData',
 				type: 'json',
-				default: JSON.stringify({ notes: 'Updated by n8n' }, null, 2),
+				default: JSON.stringify(
+					{
+						title: 'Production Database',
+						fields: [
+							{ type: 'login', value: ['service-account'] },
+							{ type: 'password', value: ['replace-me'] },
+							{ type: 'text', label: 'Environment', value: ['production'] },
+						],
+					},
+					null,
+					2,
+				),
 				required: true,
 				displayOptions: {
 					show: {
@@ -147,7 +173,7 @@ export class KeeperSecretsManager implements INodeType {
 					},
 				},
 				description:
-					'Top-level patch. Omitted properties remain unchanged; supplied fields/custom arrays replace those entire arrays.',
+					'Omitted properties stay unchanged. Supplied fields/custom arrays replace those arrays. Fields outside the effective record type are moved to custom. The example replaces standard fields; remove fields from the patch to update only the title.',
 			},
 			{
 				displayName: 'Confirm Deletion',
@@ -218,23 +244,46 @@ export class KeeperSecretsManager implements INodeType {
 					const excluded = new Set(
 						(this.getNodeParameter('excludeUids', i) as string).split(/[\s,]+/).filter(Boolean),
 					);
+					const excludeNullValues = this.getNodeParameter('excludeNullValues', i, false) as boolean;
 					for (const record of records)
-						if (!excluded.has(record.recordUid)) emit(formatRecord(record));
+						if (!excluded.has(record.recordUid)) emit(formatRecord(record, excludeNullValues));
 				} else if (operation === 'create') {
 					const folder = (this.getNodeParameter('folderUid', i) as string).trim();
 					if (!folder)
 						throw new NodeOperationError(this.getNode(), 'Shared folder UID is required');
 					const structured = this.getNodeParameter('inputMode', i, 'structured') !== 'json';
-					const data = createData(
-						structured
-							? {
-									...(this.getNodeParameter('recordOptions', i, {}) as IDataObject),
-									title: this.getNodeParameter('title', i),
-									type: this.getNodeParameter('recordType', i),
-									fields: structuredFields(this.getNodeParameter('recordFields', i, {})),
-									custom: structuredFields(this.getNodeParameter('customFields', i, {})),
-								}
-							: this.getNodeParameter('recordData', i),
+					const selection = this.getNodeParameter('recordType', i, 'login') as string;
+					const type =
+						selection === 'custom' ? this.getNodeParameter('customRecordType', i) : selection;
+					if (
+						structured &&
+						selection !== 'custom' &&
+						!Object.prototype.hasOwnProperty.call(recordSchemas, selection)
+					)
+						throw new NodeOperationError(
+							this.getNode(),
+							'Select a supported or custom record type',
+						);
+					const data = normalizeRecord(
+						createData(
+							structured
+								? {
+										...(this.getNodeParameter('recordOptions', i, {}) as IDataObject),
+										...(this.getNodeParameter('notes', i, '')
+											? { notes: this.getNodeParameter('notes', i, '') }
+											: {}),
+										title: this.getNodeParameter('title', i),
+										type,
+										fields: [
+											...structuredFields(
+												this.getNodeParameter(fieldParameterName(selection), i, {}),
+											),
+											...structuredFields(this.getNodeParameter('recordFields', i, {})),
+										],
+										custom: structuredFields(this.getNodeParameter('customFields', i, {})),
+									}
+								: this.getNodeParameter('recordData', i),
+						),
 					);
 					const recordUid = await client.createSecret(folder, data);
 					emit({ recordUid, operation, success: true });
@@ -249,15 +298,34 @@ export class KeeperSecretsManager implements INodeType {
 							: this.getNodeParameter('updateData', i),
 						true,
 					);
+					let suppliedFields: IDataObject[] = [];
 					if (structured) {
-						for (const [property, parameter] of [
-							['fields', 'recordFields'],
-							['custom', 'customFields'],
-						]) {
-							const fields = structuredFields(this.getNodeParameter(parameter, i, {}));
-							if (fields.length) patch[property] = fields;
-						}
+						const selection = this.getNodeParameter('recordType', i, 'existing') as string;
+						if (
+							!['existing', 'custom'].includes(selection) &&
+							!Object.prototype.hasOwnProperty.call(recordSchemas, selection)
+						)
+							throw new NodeOperationError(
+								this.getNode(),
+								'Select a supported or custom record type',
+							);
+						if (selection !== 'existing')
+							patch.type =
+								selection === 'custom' ? this.getNodeParameter('customRecordType', i) : selection;
+						const title = this.getNodeParameter('title', i, '');
+						if (title !== '') patch.title = title;
+						const notes = this.getNodeParameter('notes', i, '');
+						if (notes !== '' || this.getNodeParameter('clearNotes', i, false))
+							patch.notes = this.getNodeParameter('clearNotes', i, false) ? '' : notes;
+						suppliedFields = [
+							...structuredFields(this.getNodeParameter(fieldParameterName(selection), i, {})),
+							...structuredFields(this.getNodeParameter('recordFields', i, {})),
+						];
+						if (suppliedFields.length) patch.fields = suppliedFields;
+						const custom = structuredFields(this.getNodeParameter('customFields', i, {}));
+						if (custom.length) patch.custom = custom;
 					}
+					validateData(patch, true);
 					if (!Object.keys(patch).length)
 						throw new NodeOperationError(
 							this.getNode(),
@@ -271,6 +339,16 @@ export class KeeperSecretsManager implements INodeType {
 							'The record was not found or is not shared with this application',
 						);
 					if (structured) {
+						if (suppliedFields.length) {
+							record.data = normalizeRecord(record.data);
+							const classified = partitionFields(
+								(patch.type ?? record.data.type) as string,
+								suppliedFields,
+							);
+							patch.fields = classified.fields;
+							if (classified.custom.length)
+								patch.custom = [...((patch.custom ?? []) as IDataObject[]), ...classified.custom];
+						}
 						for (const property of ['fields', 'custom'] as const)
 							if (patch[property])
 								patch[property] = mergeFields(
@@ -279,6 +357,7 @@ export class KeeperSecretsManager implements INodeType {
 								);
 					}
 					record.data = { ...record.data, ...patch } as typeof record.data;
+					if ('fields' in patch || 'type' in patch) record.data = normalizeRecord(record.data);
 					await client.updateSecret(record);
 					emit({ recordUid: uid, operation, success: true });
 				} else if (operation === 'delete') {

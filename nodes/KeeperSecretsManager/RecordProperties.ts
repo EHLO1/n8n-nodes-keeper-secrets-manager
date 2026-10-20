@@ -1,38 +1,59 @@
 import type { INodeProperties } from 'n8n-workflow';
+import {
+	arrayFieldTypes,
+	booleanFieldTypes,
+	fieldParameterName,
+	numericFieldTypes,
+	objectFieldTypes,
+	recordSchemas,
+	recordTypeNames,
+} from './RecordSchemas';
 
-function fields(name: string, displayName: string): INodeProperties {
+const docs =
+	'<a href="https://docs.keeper.io/keeperpam/secrets-manager/about/field-record-types#default-record-types" target="_blank">Keeper record types</a>';
+const structured = { operation: ['create', 'update'], inputMode: ['structured'] };
+const jsonTypes = [...objectFieldTypes, ...arrayFieldTypes];
+const typeOptions = Object.entries(recordTypeNames)
+	.map(([value, name]) => ({ name, value }))
+	.sort((a, b) => a.name.localeCompare(b.name));
+
+function fields(type: string): INodeProperties {
 	return {
-		displayName,
-		name,
+		displayName: 'Fields',
+		name: fieldParameterName(type),
 		type: 'fixedCollection',
-		default: {},
+		default: {
+			field: (recordSchemas[type] ?? []).map((slot) => ({
+				...slot,
+				textValue: '',
+				jsonValue: '',
+				clearValue: false,
+			})),
+		},
 		placeholder: 'Add Field',
 		typeOptions: { multipleValues: true },
-		displayOptions: { show: { operation: ['create', 'update'], inputMode: ['structured'] } },
-		description: 'Updates match by Keeper type and label; unrelated fields remain unchanged',
+		displayOptions: { show: { ...structured, recordType: [type] } },
+		description:
+			'Default fields belong to the selected record type. Additional types or labels are saved as optional custom fields. Blank values are empty on create and unchanged on update; Clear Value explicitly clears an existing value.',
 		options: [
 			{
 				name: 'field',
 				displayName: 'Field',
 				values: [
 					{
-						displayName: 'Data Type',
-						name: 'valueType',
-						type: 'options',
-						default: 'text',
-						options: [
-							{ name: 'Boolean', value: 'boolean' },
-							{ name: 'JSON Array', value: 'json' },
-							{ name: 'Number', value: 'number' },
-							{ name: 'Text', value: 'text' },
-						],
+						displayName: 'Clear Value',
+						name: 'clearValue',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to clear this field instead of supplying a value',
 					},
 					{
 						displayName: 'Label',
 						name: 'label',
 						type: 'string',
 						default: '',
-						description: 'Optional field label; use the exact existing label when updating',
+						description:
+							'Use the default label for a standard field; a different label adds a custom field',
 					},
 					{
 						displayName: 'Type',
@@ -40,37 +61,25 @@ function fields(name: string, displayName: string): INodeProperties {
 						type: 'string',
 						default: 'text',
 						required: true,
-						description: 'Keeper field type, such as login, password, text, or host',
+						description:
+							'Keeper field type, such as login, password, text, host, date, or checkbox. The value format is determined automatically.',
 					},
 					{
 						displayName: 'Value',
 						name: 'textValue',
 						type: 'string',
 						default: '',
-						displayOptions: { show: { valueType: ['text'] } },
+						displayOptions: { hide: { type: jsonTypes }, show: { clearValue: [false] } },
+						description: `Text is preserved exactly. For ${numericFieldTypes.join(', ')} use epoch milliseconds; for ${booleanFieldTypes.join(', ')} use true or false. Blank leaves an existing value unchanged.`,
 					},
 					{
 						displayName: 'Value',
-						name: 'numberValue',
-						type: 'number',
-						default: 0,
-						displayOptions: { show: { valueType: ['number'] } },
-					},
-					{
-						displayName: 'Value',
-						name: 'booleanValue',
-						type: 'boolean',
-						default: false,
-						displayOptions: { show: { valueType: ['boolean'] } },
-					},
-					{
-						displayName: 'Value Array',
 						name: 'jsonValue',
 						type: 'json',
-						default: JSON.stringify(['value'], null, 2),
-						displayOptions: { show: { valueType: ['json'] } },
+						default: '',
+						displayOptions: { show: { type: jsonTypes, clearValue: [false] } },
 						description:
-							'Keeper value array. For a host field: [{"hostName":"db.example.com","port":"5432"}]. Use [] to clear a value.',
+							'A Keeper object or value array. Host example: {"hostName":"db.example.com","port":"5432"}. Reference fields accept arrays of record UIDs. Blank leaves the value unchanged.',
 					},
 				],
 			},
@@ -96,54 +105,78 @@ export const recordProperties: INodeProperties[] = [
 		type: 'string',
 		default: '',
 		required: true,
+		description:
+			'The record name shown in the Keeper vault, such as Production Database. It is separate from the login or username stored inside the record.',
+		displayOptions: { show: { operation: ['create'], inputMode: ['structured'] } },
+	},
+	{
+		displayName: 'Title',
+		name: 'title',
+		type: 'string',
+		default: '',
+		description:
+			'Rename the record as shown in the Keeper vault. Leave blank to preserve its current title; this does not change its login or username.',
+		displayOptions: { show: { operation: ['update'], inputMode: ['structured'] } },
+	},
+	{
+		displayName: 'Record Type',
+		name: 'recordType',
+		type: 'options',
+		default: 'login',
+		options: [
+			{ name: 'Login', value: 'login' },
+			...typeOptions.filter((option) => option.value !== 'login'),
+			{ name: 'Custom Record Type', value: 'custom' },
+		],
+		description: `Select a template to show its default fields. See ${docs}. File and photo templates reference existing attachments; they do not upload files.`,
 		displayOptions: { show: { operation: ['create'], inputMode: ['structured'] } },
 	},
 	{
 		displayName: 'Record Type',
 		name: 'recordType',
-		type: 'string',
-		default: 'login',
-		required: true,
-		description: 'Keeper record type, such as login, serverCredentials, or databaseCredentials',
-		displayOptions: { show: { operation: ['create'], inputMode: ['structured'] } },
-	},
-	fields('recordFields', 'Fields'),
-	fields('customFields', 'Custom Fields'),
-	{
-		displayName: 'Additional Properties',
-		name: 'recordOptions',
-		type: 'collection',
-		default: {},
-		placeholder: 'Add Property',
-		displayOptions: { show: { operation: ['create'], inputMode: ['structured'] } },
+		type: 'options',
+		default: 'existing',
 		options: [
-			{
-				displayName: 'Notes',
-				name: 'notes',
-				type: 'string',
-				default: '',
-				typeOptions: { rows: 4 },
-			},
+			{ name: 'Keep Existing Type', value: 'existing' },
+			...typeOptions,
+			{ name: 'Custom Record Type', value: 'custom' },
 		],
-	},
-	{
-		displayName: 'Update Fields',
-		name: 'updateOptions',
-		type: 'collection',
-		default: {},
-		placeholder: 'Add Property',
+		description: `Keep the existing type, or explicitly select a type to show its default fields and apply that type to the record. See ${docs}. Blank field values never overwrite existing values.`,
 		displayOptions: { show: { operation: ['update'], inputMode: ['structured'] } },
-		options: [
-			{
-				displayName: 'Notes',
-				name: 'notes',
-				type: 'string',
-				default: '',
-				typeOptions: { rows: 4 },
-				description: 'Empty text clears notes; omit to preserve existing notes',
-			},
-			{ displayName: 'Record Type', name: 'type', type: 'string', default: 'login' },
-			{ displayName: 'Title', name: 'title', type: 'string', default: '' },
-		],
 	},
+	{
+		displayName: 'Custom Record Type',
+		name: 'customRecordType',
+		type: 'string',
+		default: '',
+		required: true,
+		description:
+			'Exact name of a record type already configured in your Keeper tenant. Its schema is not available locally; use Raw JSON to control standard and custom arrays explicitly.',
+		displayOptions: { show: { ...structured, recordType: ['custom'] } },
+	},
+	...Object.keys(recordSchemas).map(fields),
+	fields('existing'),
+	fields('custom'),
+	{
+		displayName: 'Notes',
+		name: 'notes',
+		type: 'string',
+		default: '',
+		typeOptions: { rows: 4 },
+		description:
+			'Optional record-level notes shown in Keeper. On update, blank preserves existing notes; use Clear Notes to remove them.',
+		displayOptions: { show: structured },
+	},
+	{
+		displayName: 'Clear Notes',
+		name: 'clearNotes',
+		type: 'boolean',
+		default: false,
+		description: 'Whether to remove the existing record-level notes',
+		displayOptions: { show: { operation: ['update'], inputMode: ['structured'] } },
+	},
+	// Read saved beta.4 parameters without exposing the superseded containers in the editor.
+	...['recordFields', 'customFields', 'recordOptions', 'updateOptions'].map(
+		(name): INodeProperties => ({ displayName: name, name, type: 'hidden', default: {} }),
+	),
 ];

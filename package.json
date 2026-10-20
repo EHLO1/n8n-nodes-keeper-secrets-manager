@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-keeper-secrets-manager",
-	"version": "0.1.0-beta.4",
+	"version": "0.1.0-beta.5",
 	"description": "Keeper Secrets Manager node and credentials for n8n",
 	"license": "MIT",
 	"homepage": "https://github.com/ehlo1/n8n-nodes-keeper-secrets-manager#readme",

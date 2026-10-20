@@ -9,6 +9,7 @@ Secrets Manager SDK:
 - Wire-format reference and test oracle: `@keeper-security/secrets-manager-core` 17.0.0 (development dependency only).
 - Server key ID 18, bounded rotation, and flat folder-shared record handling were checked against upstream `sdk/javascript/packages/core/src/keeper.ts` on October 16, 2026.
 - The application uses its own n8n HTTP adapters, per-client key storage, strict input checks and error handling. It does not vendor the SDK's storage, networking, logging, or global cache implementation.
+- `RecordSchemas.ts` adapts the documented default record definitions and labels from `sdk/python/helper/keeper_secrets_manager_helper/v3/default_record_types.yml`, checked October 20, 2026: https://github.com/Keeper-Security/secrets-manager/blob/master/sdk/python/helper/keeper_secrets_manager_helper/v3/default_record_types.yml. It covers the 18 default types in Keeper's field/record documentation. Tenant-defined and PAM-specific schemas are preserved as supplied rather than guessed.
 
 Upstream license: https://github.com/Keeper-Security/secrets-manager/blob/master/LICENSE
 

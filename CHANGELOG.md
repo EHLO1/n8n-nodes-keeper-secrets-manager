@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.5
+
+- Add Keeper's 18 documented default record templates, including standard field labels and the current SDK's additional default fields. Selecting a record type populates its Fields section.
+- Combine standard and custom field entry into one section. Automatically move extra field types, labels, and occurrences to custom for known record types, for both structured input and Raw JSON. Unknown tenant schemas retain their explicit arrays.
+- Infer structured value formats from Keeper field types; preserve textual secrets exactly. Remove the Data Type selector. Blank placeholders preserve existing values; Clear Value explicitly empties a field.
+- Replace Additional Properties and Update Fields containers with direct Title, Notes, and Clear Notes controls. Add explanatory tooltips, Keeper documentation links, and a fuller Raw JSON update example.
+- Add Exclude Null Values to both read operations, preserving false, zero, empty strings, and nested values.
+- Retain support for saved beta.4 input containers without displaying them in the new editor.
+
 ## 0.1.0-beta.4
 
 - Use flat output for every read, retaining the selected columns and adding custom fields, duplicate values, multi-value arrays, and direct folder UID/name.

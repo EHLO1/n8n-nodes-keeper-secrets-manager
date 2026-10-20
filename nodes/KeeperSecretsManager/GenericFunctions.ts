@@ -3,6 +3,12 @@ import { createPrivateKey, ECDH } from 'node:crypto';
 import type { KeeperConfig, KeeperRecord, RecordData } from './KeeperClient';
 import { decodeBase64, KeeperValidationError } from './KeeperCrypto';
 import { serverKey } from './KeeperServerKeys';
+import {
+	arrayFieldTypes,
+	booleanFieldTypes,
+	numericFieldTypes,
+	objectFieldTypes,
+} from './RecordSchemas';
 export { KeeperValidationError } from './KeeperCrypto';
 
 export function parseObject(value: unknown): Record<string, unknown> {
@@ -130,7 +136,7 @@ export function createData(value: unknown): RecordData {
 	return validateData(value) as unknown as RecordData;
 }
 
-export function formatRecord(record: KeeperRecord): IDataObject {
+export function formatRecord(record: KeeperRecord, excludeNullValues = false): IDataObject {
 	const data = record.data as unknown as {
 		title: string;
 		fields?: { label?: string; type: string; value?: unknown[] }[];
@@ -184,6 +190,7 @@ export function formatRecord(record: KeeperRecord): IDataObject {
 		const values = field.value ?? [];
 		map[key] = values.length > 1 ? values : (values[0] ?? null);
 	}
+	if (excludeNullValues) for (const key of Object.keys(map)) if (map[key] === null) delete map[key];
 	return JSON.parse(JSON.stringify(map)) as IDataObject;
 }
 
@@ -191,7 +198,7 @@ export function structuredFields(value: unknown): IDataObject[] {
 	const rows = parseObject(value ?? {}).field ?? [];
 	if (!Array.isArray(rows)) throw new KeeperValidationError('Invalid structured fields');
 	const seen = new Set<string>();
-	return rows.map((row) => {
+	return rows.flatMap((row) => {
 		const field = parseObject(row);
 		const type = typeof field.type === 'string' ? field.type.trim() : '';
 		const label = typeof field.label === 'string' ? field.label : '';
@@ -201,7 +208,45 @@ export function structuredFields(value: unknown): IDataObject[] {
 			throw new KeeperValidationError('Use distinct labels for fields with the same type');
 		seen.add(identity);
 		let values: unknown[];
-		if (field.valueType === 'json') {
+		if (field.clearValue === true) values = [];
+		else if (field.valueType === undefined) {
+			const complex = objectFieldTypes.includes(type) || arrayFieldTypes.includes(type);
+			const input = complex ? field.jsonValue : field.textValue;
+			// Template placeholders never erase values during an update.
+			if (input === '' || input === undefined) return [];
+			if (complex) {
+				let parsed: unknown;
+				try {
+					parsed = typeof input === 'string' ? JSON.parse(input) : input;
+				} catch {
+					parsed = undefined;
+				}
+				if (parsed === undefined)
+					throw new KeeperValidationError('Enter valid JSON for a compound field');
+				values = Array.isArray(parsed) ? parsed : [parsed];
+				if (arrayFieldTypes.includes(type)) {
+					if (!Array.isArray(parsed) || values.some((v) => typeof v !== 'string'))
+						throw new KeeperValidationError('Reference fields require an array of UID strings');
+				} else if (values.some((v) => !v || typeof v !== 'object' || Array.isArray(v)))
+					throw new KeeperValidationError('Compound fields require objects or an array of objects');
+			} else if (numericFieldTypes.includes(type)) {
+				if (
+					(typeof input !== 'string' && typeof input !== 'number') ||
+					String(input).trim() === '' ||
+					!Number.isSafeInteger(Number(input))
+				)
+					throw new KeeperValidationError('Date fields require integer epoch milliseconds');
+				values = [Number(input)];
+			} else if (booleanFieldTypes.includes(type)) {
+				if (![true, false, 'true', 'false'].includes(input as string | boolean))
+					throw new KeeperValidationError('Checkbox fields require true or false');
+				values = [input === true || input === 'true'];
+			} else {
+				if (typeof input !== 'string')
+					throw new KeeperValidationError('Text fields require a string value');
+				values = [input];
+			}
+		} else if (field.valueType === 'json') {
 			let parsed: unknown;
 			try {
 				parsed =
@@ -227,7 +272,7 @@ export function structuredFields(value: unknown): IDataObject[] {
 				throw new KeeperValidationError('Enter a text field value');
 			values = [field.textValue];
 		}
-		return { type, ...(label ? { label } : {}), value: values } as IDataObject;
+		return [{ type, ...(label ? { label } : {}), value: values } as IDataObject];
 	});
 }
 
